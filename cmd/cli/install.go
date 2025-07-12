@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -20,4 +21,6 @@ var installCmd = &cobra.Command{
 
 func init() {
 	installCmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Preview changes without applying them")
+
+	rootCmd.AddCommand(installCmd)
 }

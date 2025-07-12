@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -17,4 +18,8 @@ var reinitCmd = &cobra.Command{
 		}
 		fmt.Printf("reinit called with namespace=%s\n", namespace)
 	},
+}
+
+func init() {
+	rootCmd.AddCommand(reinitCmd)
 }

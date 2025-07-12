@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -20,4 +21,6 @@ var upgradeCmd = &cobra.Command{
 
 func init() {
 	upgradeCmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Preview changes without applying them")
+
+	rootCmd.AddCommand(upgradeCmd)
 }

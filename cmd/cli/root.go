@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// main is the entrypoint for the cutepod CLI.
+
 var rootCmd = &cobra.Command{
 	Use:   "cutepod",
 	Short: "Cutepod is an ephemeral Kubernetes-inspired tool for local container management",
@@ -19,11 +21,4 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func init() {
-	rootCmd.AddCommand(lintCmd)
-	rootCmd.AddCommand(installCmd)
-	rootCmd.AddCommand(upgradeCmd)
-	rootCmd.AddCommand(reinitCmd)
 }
