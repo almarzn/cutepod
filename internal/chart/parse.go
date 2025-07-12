@@ -14,13 +14,13 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-type LintOptions struct {
+type ParseOptions struct {
 	ChartPath string
 	Verbose   bool
 	Namespace string
 }
 
-func Parse(opts LintOptions) (map[string]interface{}, error) {
+func Parse(opts ParseOptions) (map[string]interface{}, error) {
 	chartYamlPath := filepath.Join(opts.ChartPath, "Chart.yaml")
 	chartBytes, err := os.ReadFile(chartYamlPath)
 	if err != nil {

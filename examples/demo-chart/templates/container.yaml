@@ -5,4 +5,4 @@ metadata:
   name: {{ .Release.Name }}-container
   namespace: {{ .Release.Namespace }}
 spec:
-  image: quay.io/podman/hello:latest
+  image: docker.io/strm/helloworld-http

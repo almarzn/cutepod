@@ -42,7 +42,7 @@ spec:
   image: {{ .Values.Image}}
 `), 0644))
 
-	opts := chart.LintOptions{
+	opts := chart.ParseOptions{
 		ChartPath: dir,
 		Namespace: "default",
 		Verbose:   true,

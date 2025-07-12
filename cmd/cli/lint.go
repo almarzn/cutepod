@@ -14,7 +14,7 @@ func init() {
 		Short: "Validate templates and YAML structure",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			chart.Lint(chart.LintOptions{
+			chart.Lint(chart.ParseOptions{
 				ChartPath: args[0],
 				Verbose:   Verbose,
 				Namespace: "<namespace>",
