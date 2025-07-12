@@ -226,6 +226,7 @@ Cutepod is **Kubernetes-inspired**, not compatible. It mimics some structures bu
 * **Podman installed and accessible via `$PATH`**
 * **libpod** via `containers/libpod`
 * Linux/macOS (rootless Podman supported)
+* CLI framework: Cobra (github.com/spf13/cobra) – chosen for idiomatic Go CLI development
 
 ---
 
@@ -247,6 +248,8 @@ This project is set up for autonomous development via Codex.
 ### 2025-07-12
 - Initial Cutepod README created
 - Defined chart structure, kinds, usage and design principles
+- Created initial project plan at .codex/plan_2025-07-12.md
+- Bootstrapped Go module and Cobra-based CLI entrypoint with command stubs
 ```
 
 ---
