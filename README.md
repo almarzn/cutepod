@@ -250,6 +250,8 @@ This project is set up for autonomous development via Codex.
 - Defined chart structure, kinds, usage and design principles
 - Created initial project plan at .codex/plan_2025-07-12.md
 - Bootstrapped Go module and Cobra-based CLI entrypoint with command stubs
+- Completed Phase 2: Chart Rendering & Validation
+- Added initial example chart under examples/demo-chart
 ```
 
 ---
