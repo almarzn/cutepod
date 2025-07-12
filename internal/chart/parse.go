@@ -2,8 +2,9 @@ package chart
 
 import (
 	"bytes"
+	"cutepod/internal/container"
+	"cutepod/internal/meta"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,11 +20,11 @@ type LintOptions struct {
 	Namespace string
 }
 
-func Parse(opts LintOptions) error {
+func Parse(opts LintOptions) (map[string]interface{}, error) {
 	chartYamlPath := filepath.Join(opts.ChartPath, "Chart.yaml")
 	chartBytes, err := os.ReadFile(chartYamlPath)
 	if err != nil {
-		return fmt.Errorf("failed to read Chart.yaml: %w", err)
+		return nil, fmt.Errorf("failed to read Chart.yaml: %w", err)
 	}
 
 	var chart struct {
@@ -31,18 +32,18 @@ func Parse(opts LintOptions) error {
 		Version string `yaml:"version"`
 	}
 	if err := yaml.Unmarshal(chartBytes, &chart); err != nil {
-		return fmt.Errorf("failed to parse Chart.yaml: \n\n%s", yaml.FormatError(err, true, true))
+		return nil, fmt.Errorf("failed to parse Chart.yaml: \n\n%s", yaml.FormatError(err, true, true))
 	}
 	releaseName := chart.Name
 
 	valuesPath := filepath.Join(opts.ChartPath, "values.yaml")
 	valuesBytes, err := os.ReadFile(valuesPath)
 	if err != nil {
-		return fmt.Errorf("failed to read values.yaml: %w", err)
+		return nil, fmt.Errorf("failed to read values.yaml: %w", err)
 	}
 	var values map[string]interface{}
 	if err := yaml.Unmarshal(valuesBytes, &values); err != nil {
-		return fmt.Errorf("failed to parse values.yaml: \n\n%s", yaml.FormatError(err, true, true))
+		return nil, fmt.Errorf("failed to parse values.yaml: \n\n%s", yaml.FormatError(err, true, true))
 	}
 
 	// Build template context (simulate Helm)
@@ -59,7 +60,10 @@ func Parse(opts LintOptions) error {
 	}
 
 	templatesDir := filepath.Join(opts.ChartPath, "templates")
-	return filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
+
+	var objects = map[string]interface{}{}
+
+	err = filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -96,16 +100,25 @@ func Parse(opts LintOptions) error {
 		}
 
 		// Validate YAML
-		decoder := yaml.NewDecoder(bytes.NewReader(buf.Bytes()))
-		for {
-			var doc interface{}
-			if err := decoder.Decode(&doc); err != nil {
-				if err == io.EOF {
-					break
-				}
-				return fmt.Errorf("invalid YAML in template %s: %w", path, err)
-			}
+		spec, err := meta.Parse(buf)
+		if err != nil {
+			return fmt.Errorf("failed to parse file: %s\n\n%s", path, err)
 		}
+
+		if container.CanParse(spec) {
+			r, err := container.Parse(buf)
+			if err != nil {
+				return fmt.Errorf("failed to parse file: %s\n\n%s", path, err)
+			}
+			objects[spec.Name] = r
+		}
+
 		return nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return objects, nil
 }

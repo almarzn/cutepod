@@ -1,13 +1,8 @@
 ---
 kind: CuteContainer
+apiVersion: cutepod/v1alpha0
 metadata:
   name: {{ .Release.Name }}-container
   namespace: {{ .Release.Namespace }}
 spec:
-  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-  ports:
-    - containerPort: {{ .Values.service.port }}
-  env:
-    - name: MODE
-      value: production
-
+  image: quay.io/podman/hello:latest

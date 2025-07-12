@@ -8,7 +8,7 @@ import (
 
 // Lint parses and renders chart templates and validates resulting YAML.
 func Lint(opts LintOptions) {
-	err := Parse(opts)
+	_, err := Parse(opts)
 	if err != nil {
 		fmt.Println(yaml.FormatError(err, true, true))
 		return
