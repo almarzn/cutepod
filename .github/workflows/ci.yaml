@@ -16,7 +16,7 @@ jobs:
 
       - name: Install Go
         run: |
-          dnf install -y golang make
+          dnf install -y golang make gpgme-devel btrfs-progs-devel
 
       - name: Build CLI
         run: go build -o cute main.go
