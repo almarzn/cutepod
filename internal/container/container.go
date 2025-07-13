@@ -39,8 +39,8 @@ type EnvVar struct {
 }
 
 type ContainerPort struct {
-	ContainerPort int32  `json:"containerPort"`
-	HostPort      int32  `json:"hostPort,omitempty"`
+	ContainerPort uint16 `json:"containerPort"`
+	HostPort      uint16 `json:"hostPort,omitempty"`
 	Protocol      string `json:"protocol,omitempty"` // TCP or UDP
 }
 

@@ -1,0 +1,3 @@
+# Default values for demo-chart
+
+image: localhost/e2e-server:test
