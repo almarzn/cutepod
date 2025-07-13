@@ -1,0 +1,30 @@
+name: Podman E2E CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  podman-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install latest Podman from Kubic
+        run: |
+          sudo apt remove -y podman buildah
+          source /etc/os-release
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/${ID}_${VERSION_ID}/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/libcontainers.gpg > /dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/libcontainers.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/${ID}_${VERSION_ID}/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+          sudo apt update
+          sudo apt install -y podman
+
+      - name: Build test server image
+        run: podman build --network=none -t localhost/e2e-server:test -f e2e/Containerfile e2e
+
+      - name: Run end-to-end tests
+        run: make e2e
