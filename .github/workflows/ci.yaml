@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
+      options: --privileged
       image: quay.io/podman/stable  # Official Podman image based on Fedora
     steps:
       - uses: actions/checkout@v3
