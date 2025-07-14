@@ -22,5 +22,8 @@ jobs:
       - name: Build CLI
         run: go build -o cute main.go
 
+      - name: Run podman sock
+        run: podman system service -t 0 &
+
       - name: Run E2E tests
         run: make e2e
