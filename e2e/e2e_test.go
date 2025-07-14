@@ -29,7 +29,7 @@ func TestCuteE2E(t *testing.T) {
 
 	// Step 2: Build the container
 	t.Log("Building test container...")
-	build := exec.Command("podman", "build", "-t", imageTag, "--network=none", "-f", "Containerfile", ".")
+	build := exec.Command("podman", "build", "-t", imageTag, "--network=host", "-f", "Containerfile", ".")
 	build.Dir = cwd
 	build.Stdout, build.Stderr = os.Stdout, os.Stderr
 	if err := build.Run(); err != nil {
