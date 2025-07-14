@@ -25,4 +25,4 @@ jobs:
       - name: Run E2E tests
         run: |
           podman system service -t 0 &
-          make e2e
+          PODMAN_SOCK=unix://run/podman/podman.sock make e2e
