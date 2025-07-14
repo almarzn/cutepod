@@ -2,8 +2,7 @@ package chart
 
 import (
 	"context"
-	"cutepod/internal/container"
-	"cutepod/internal/target"
+	"cutepod/internal/object"
 	"fmt"
 )
 
@@ -27,19 +26,14 @@ func Install(opts InstallOptions) error {
 		return err
 	}
 
-	installTarget := target.NewInstallTarget(opts.Namespace)
+	installTarget := object.NewInstallTarget(opts.Namespace)
 
 	for name, chart := range charts {
-		if v, ok := chart.(*container.CuteContainer); ok {
-			fmt.Printf("Installing chart %s\n", name)
-			err := v.Install(context.Background(), *installTarget)
-			if err != nil {
-				return err
-			}
-			continue
+		fmt.Printf("Installing chart %s\n", name)
+		err := chart.Install(context.Background(), *installTarget)
+		if err != nil {
+			return err
 		}
-
-		return fmt.Errorf("unknown chart type %s", name)
 	}
 
 	return nil

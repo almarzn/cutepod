@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cutepod/internal/container"
 	"cutepod/internal/meta"
+	"cutepod/internal/object"
 	"fmt"
 	"io/fs"
 	"os"
@@ -20,7 +21,7 @@ type ParseOptions struct {
 	Namespace string
 }
 
-func Parse(opts ParseOptions) (map[string]interface{}, error) {
+func Parse(opts ParseOptions) (map[string]object.Actions, error) {
 	chartYamlPath := filepath.Join(opts.ChartPath, "Chart.yaml")
 	chartBytes, err := os.ReadFile(chartYamlPath)
 	if err != nil {
@@ -61,7 +62,7 @@ func Parse(opts ParseOptions) (map[string]interface{}, error) {
 
 	templatesDir := filepath.Join(opts.ChartPath, "templates")
 
-	var objects = map[string]interface{}{}
+	var objects = map[string]object.Actions{}
 
 	err = filepath.WalkDir(templatesDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
