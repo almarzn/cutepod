@@ -12,13 +12,10 @@ func NewInstallTarget(rootNamespace string) *InstallTarget {
 }
 
 func (i *InstallTarget) GetContainerName(d Describe) string {
-	namespace := i.GetNamespace(d.GetNamespace())
+	namespace := i.GetNamespace()
 	return namespace + "-" + d.GetName()
 }
 
-func (i *InstallTarget) GetNamespace(objectNamespace string) string {
-	if objectNamespace == "" {
-		objectNamespace = i.rootNamespace
-	}
-	return objectNamespace
+func (i *InstallTarget) GetNamespace() string {
+	return i.rootNamespace
 }

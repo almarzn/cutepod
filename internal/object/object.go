@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-type ConfigChange struct {
+type SpecChange struct {
 	Path     string
 	Expected string
 	Actual   string
@@ -13,7 +13,7 @@ type ConfigChange struct {
 type Actions interface {
 	Install(ctx context.Context, t InstallTarget) error
 	Uninstall(ctx context.Context, t InstallTarget) error
-	ComputeChanges(ctx context.Context, t InstallTarget) ([]ConfigChange, error)
+	ComputeChanges(ctx context.Context, t InstallTarget) ([]SpecChange, error)
 }
 
 type Describe interface {

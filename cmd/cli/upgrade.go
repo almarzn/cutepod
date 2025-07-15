@@ -21,9 +21,6 @@ var upgradeCmd = &cobra.Command{
 		if upgradeVerbose {
 			fmt.Printf("upgrade called with namespace=%s path=%s dry-run=%v\n", namespace, path, installDryRun)
 		}
-		if upgradeDryRun {
-			fmt.Printf("⚠️ Running with dry-run\n\n")
-		}
 
 		err := chart.Upgrade(chart.UpgradeOptions{
 			ChartPath: path,

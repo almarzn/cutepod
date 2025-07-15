@@ -10,8 +10,8 @@ import (
 	"github.com/containers/podman/v5/pkg/inspect"
 )
 
-func Compare(t object.InstallTarget, c *CuteContainer, inspect *define.InspectContainerData, image *inspect.ImageData) ([]object.ConfigChange, error) {
-	var changes []object.ConfigChange
+func Compare(t object.InstallTarget, c *CuteContainer, inspect *define.InspectContainerData, image *inspect.ImageData) ([]object.SpecChange, error) {
+	var changes []object.SpecChange
 	changes = stringChanges(changes, "metadata.name", t.GetContainerName(c), inspect.Name)
 	changes = stringChanges(changes, "spec.image", normalizeImage(c.Spec.Image), normalizeImage(inspect.Config.Image))
 	changes = stringArrayChanges(changes, "spec.command", c.Spec.Command, inspect.Config.Cmd)
@@ -23,7 +23,7 @@ func Compare(t object.InstallTarget, c *CuteContainer, inspect *define.InspectCo
 	// UID & GID
 	if c.Spec.UID != nil && inspect.Config.User != "" {
 		if uidStr := strconv.FormatInt(*c.Spec.UID, 10); uidStr != inspect.Config.User {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     "spec.uid",
 				Expected: uidStr,
 				Actual:   inspect.Config.User,
@@ -98,7 +98,7 @@ func normalizeImage(image string) string {
 	return image
 }
 
-func compareEnvVars(changes []object.ConfigChange, path string, expected []EnvVar, actual []string) []object.ConfigChange {
+func compareEnvVars(changes []object.SpecChange, path string, expected []EnvVar, actual []string) []object.SpecChange {
 	envMap := make(map[string]string)
 	for _, env := range expected {
 		envMap[env.Name] = env.Value
@@ -110,7 +110,7 @@ func compareEnvVars(changes []object.ConfigChange, path string, expected []EnvVa
 		}
 		k, v := parts[0], parts[1]
 		if ev, ok := envMap[k]; ok && ev != v {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     path + "." + k,
 				Actual:   v,
 				Expected: ev,
@@ -119,7 +119,7 @@ func compareEnvVars(changes []object.ConfigChange, path string, expected []EnvVa
 		delete(envMap, k)
 	}
 	for k, v := range envMap {
-		changes = append(changes, object.ConfigChange{
+		changes = append(changes, object.SpecChange{
 			Path:     path + "." + k,
 			Actual:   "<missing>",
 			Expected: v,
@@ -128,7 +128,7 @@ func compareEnvVars(changes []object.ConfigChange, path string, expected []EnvVa
 	return changes
 }
 
-func comparePorts(changes []object.ConfigChange, path string, expected []ContainerPort, actual map[string][]define.InspectHostPort) []object.ConfigChange {
+func comparePorts(changes []object.SpecChange, path string, expected []ContainerPort, actual map[string][]define.InspectHostPort) []object.SpecChange {
 	for _, port := range expected {
 		protocol := port.Protocol
 		if protocol == "" {
@@ -137,7 +137,7 @@ func comparePorts(changes []object.ConfigChange, path string, expected []Contain
 		key := fmt.Sprintf("%d/%s", port.ContainerPort, strings.ToLower(protocol))
 		actualBindings, ok := actual[key]
 		if !ok || len(actualBindings) == 0 {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     path + "." + key,
 				Actual:   "<missing>",
 				Expected: fmt.Sprintf("%d->%d", port.HostPort, port.ContainerPort),
@@ -153,7 +153,7 @@ func comparePorts(changes []object.ConfigChange, path string, expected []Contain
 			}
 		}
 		if !found {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     path + "." + key,
 				Actual:   fmt.Sprintf("%v", actualBindings),
 				Expected: fmt.Sprintf("%d", port.HostPort),
@@ -162,13 +162,13 @@ func comparePorts(changes []object.ConfigChange, path string, expected []Contain
 	}
 	return changes
 }
-func compareVolumes(changes []object.ConfigChange, path string, expected []VolumeMount, actual []define.InspectMount) []object.ConfigChange {
+func compareVolumes(changes []object.SpecChange, path string, expected []VolumeMount, actual []define.InspectMount) []object.SpecChange {
 	for _, vol := range expected {
 		found := false
 		for _, m := range actual {
 			if m.Destination == vol.ContainerPath {
 				if m.Source != vol.HostPath || m.RW == vol.ReadOnly {
-					changes = append(changes, object.ConfigChange{
+					changes = append(changes, object.SpecChange{
 						Path:     path + "." + vol.ContainerPath,
 						Actual:   fmt.Sprintf("source=%s, readonly=%t", m.Source, !m.RW),
 						Expected: fmt.Sprintf("source=%s, readonly=%t", vol.HostPath, vol.ReadOnly),
@@ -179,7 +179,7 @@ func compareVolumes(changes []object.ConfigChange, path string, expected []Volum
 			}
 		}
 		if !found {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     path + "." + vol.ContainerPath,
 				Actual:   "<missing>",
 				Expected: fmt.Sprintf("source=%s, readonly=%t", vol.HostPath, vol.ReadOnly),
@@ -188,9 +188,9 @@ func compareVolumes(changes []object.ConfigChange, path string, expected []Volum
 	}
 	return changes
 }
-func maybeChangeBool(changes []object.ConfigChange, path string, expected bool, actual bool) []object.ConfigChange {
+func maybeChangeBool(changes []object.SpecChange, path string, expected bool, actual bool) []object.SpecChange {
 	if expected != actual {
-		return append(changes, object.ConfigChange{
+		return append(changes, object.SpecChange{
 			Path:     path,
 			Actual:   fmt.Sprintf("%v", actual),
 			Expected: fmt.Sprintf("%v", expected),
@@ -199,9 +199,9 @@ func maybeChangeBool(changes []object.ConfigChange, path string, expected bool, 
 	return changes
 }
 
-func stringArrayChanges(changes []object.ConfigChange, path string, expected []string, actual []string) []object.ConfigChange {
+func stringArrayChanges(changes []object.SpecChange, path string, expected []string, actual []string) []object.SpecChange {
 	if len(expected) != len(actual) {
-		return append(changes, object.ConfigChange{
+		return append(changes, object.SpecChange{
 			Path:     path + ".size",
 			Actual:   strconv.Itoa(len(actual)),
 			Expected: strconv.Itoa(len(expected)),
@@ -210,7 +210,7 @@ func stringArrayChanges(changes []object.ConfigChange, path string, expected []s
 
 	for i, e := range expected {
 		if e != actual[i] {
-			changes = append(changes, object.ConfigChange{
+			changes = append(changes, object.SpecChange{
 				Path:     path + ".[" + strconv.Itoa(i) + "]",
 				Actual:   actual[i],
 				Expected: e,
@@ -220,9 +220,9 @@ func stringArrayChanges(changes []object.ConfigChange, path string, expected []s
 
 	return changes
 }
-func stringChanges(changes []object.ConfigChange, path string, expected string, actual string) []object.ConfigChange {
+func stringChanges(changes []object.SpecChange, path string, expected string, actual string) []object.SpecChange {
 	if actual != expected {
-		return append(changes, object.ConfigChange{
+		return append(changes, object.SpecChange{
 			Path:     path,
 			Actual:   actual,
 			Expected: expected,

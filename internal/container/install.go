@@ -5,7 +5,6 @@ import (
 	"cutepod/internal/object"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/podman/v5/pkg/bindings"
@@ -54,7 +53,7 @@ func (c *CuteContainer) buildSpec(t object.InstallTarget) *specgen.SpecGenerator
 			Name: t.GetContainerName(c),
 			Env:  c.getEnv(),
 			Labels: map[string]string{
-				"cutepod.Namespace": t.GetNamespace(c.Namespace),
+				"cutepod.Namespace": t.GetNamespace(),
 			},
 		},
 		ContainerNetworkConfig: specgen.ContainerNetworkConfig{
@@ -156,7 +155,7 @@ func (c *CuteContainer) GetNamespace() string {
 	return c.Namespace
 }
 
-func (c *CuteContainer) ComputeChanges(ctx context.Context, t object.InstallTarget) ([]object.ConfigChange, error) {
+func (c *CuteContainer) ComputeChanges(ctx context.Context, t object.InstallTarget) ([]object.SpecChange, error) {
 	ctx, err := bindings.NewConnection(ctx, GetPodmanURI())
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to podman: %v", err)
@@ -176,24 +175,7 @@ func (c *CuteContainer) ComputeChanges(ctx context.Context, t object.InstallTarg
 }
 
 func (c *CuteContainer) Uninstall(ctx context.Context, t object.InstallTarget) error {
-	ctx, err := bindings.NewConnection(ctx, GetPodmanURI())
-	if err != nil {
-		return fmt.Errorf("unable to connect to podman: %v", err)
-	}
+	name := t.GetContainerName(c)
 
-	timeout, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-
-	u := uint(15)
-	err = containers.Stop(timeout, t.GetContainerName(c), &containers.StopOptions{Timeout: &u})
-	if err != nil {
-		return fmt.Errorf("unable to stop container: %v", err)
-	}
-
-	_, err = containers.Remove(ctx, t.GetContainerName(c), &containers.RemoveOptions{})
-	if err != nil {
-		return fmt.Errorf("unable to remove container: %v", err)
-	}
-
-	return nil
+	return RemoveContainer(ctx, name)
 }
