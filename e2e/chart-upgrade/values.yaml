@@ -1,0 +1,4 @@
+image: localhost/e2e-server:test
+message: Hello, upgraded!
+containerPort: 8080
+hostPort: 18081

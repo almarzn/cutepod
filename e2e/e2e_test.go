@@ -63,7 +63,34 @@ func TestCuteE2E(t *testing.T) {
 	}
 	t.Log("Container response verified!")
 
-	// Step 7: Cleanup
+	// Step 7: Run `cute upgrade` with the updated chart
+	t.Log("Running cutepod upgrade...")
+	upgrade := exec.Command(cuteBin, "upgrade", "e2e", cwd+"/chart-upgrade", "-v")
+	upgrade.Stdout, upgrade.Stderr = os.Stdout, os.Stderr
+	if err := upgrade.Run(); err != nil {
+		t.Fatalf("cute upgrade failed: %v", err)
+	}
+
+	// Step 8: Wait for the upgraded container to become ready
+	newURL := "http://localhost:18081"
+	t.Logf("Waiting for upgraded container at %s...", newURL)
+	if err := waitForReady(newURL, 10*time.Second); err != nil {
+		t.Fatalf("upgraded container did not respond: %v", err)
+	}
+
+	// Step 9: Verify the upgraded HTTP response
+	resp2, err := http.Get(newURL)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	body2, _ := io.ReadAll(resp2.Body)
+	resp2.Body.Close()
+	if !strings.Contains(string(body2), "Hello, upgraded!") {
+		t.Fatalf("unexpected upgraded response: %q", string(body2))
+	}
+	t.Log("Upgraded container response verified!")
+
+	// Step 10: Cleanup
 	t.Log("Cleaning up...")
 	exec.Command("podman", "rm", "-f", containerName).Run()
 	exec.Command("podman", "rmi", "-f", imageTag).Run()
