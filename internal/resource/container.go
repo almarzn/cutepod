@@ -47,10 +47,9 @@ type ContainerPort struct {
 }
 
 type VolumeMount struct {
-	Name          string `json:"name,omitempty"`     // Volume name reference
-	HostPath      string `json:"hostPath,omitempty"` // Direct host path (legacy)
-	ContainerPath string `json:"containerPath"`
-	MountPath     string `json:"mountPath,omitempty"` // Alternative to ContainerPath
+	Name          string `json:"name"`                    // Volume name reference (required)
+	ContainerPath string `json:"containerPath,omitempty"` // Deprecated: use MountPath
+	MountPath     string `json:"mountPath"`               // Container mount path
 	ReadOnly      bool   `json:"readOnly,omitempty"`
 }
 

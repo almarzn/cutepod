@@ -104,9 +104,22 @@ func (c *CuteContainer) getMounts() []specs.Mount {
 	mounts := make([]specs.Mount, 0)
 
 	for _, mount := range c.Spec.Volumes {
+		mountPath := mount.MountPath
+		if mountPath == "" {
+			mountPath = mount.ContainerPath // fallback to legacy field
+		}
+
+		// TODO: Resolve volume name to actual source path
+		// This will be implemented when volume managers are created
+		// For now, we'll use the volume name as a placeholder
+		source := mount.Name
+		if source == "" {
+			source = "/tmp/cutepod-volumes/" + mount.Name // temporary fallback
+		}
+
 		mounts = append(mounts, specs.Mount{
-			Destination: mount.ContainerPath,
-			Source:      mount.HostPath,
+			Destination: mountPath,
+			Source:      source,
 		})
 	}
 

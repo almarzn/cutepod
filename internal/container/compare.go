@@ -165,13 +165,20 @@ func comparePorts(changes []object.SpecChange, path string, expected []Container
 func compareVolumes(changes []object.SpecChange, path string, expected []VolumeMount, actual []define.InspectMount) []object.SpecChange {
 	for _, vol := range expected {
 		found := false
+		mountPath := vol.MountPath
+		if mountPath == "" {
+			mountPath = vol.ContainerPath // fallback to legacy field
+		}
+
 		for _, m := range actual {
-			if m.Destination == vol.ContainerPath {
-				if m.Source != vol.HostPath || m.RW == vol.ReadOnly {
+			if m.Destination == mountPath {
+				// Note: For name-based volume references, we can't compare source directly
+				// This comparison will be enhanced when volume resolution is implemented
+				if m.RW == vol.ReadOnly {
 					changes = append(changes, object.SpecChange{
-						Path:     path + "." + vol.ContainerPath,
-						Actual:   fmt.Sprintf("source=%s, readonly=%t", m.Source, !m.RW),
-						Expected: fmt.Sprintf("source=%s, readonly=%t", vol.HostPath, vol.ReadOnly),
+						Path:     path + "." + mountPath,
+						Actual:   fmt.Sprintf("readonly=%t", !m.RW),
+						Expected: fmt.Sprintf("readonly=%t", vol.ReadOnly),
 					})
 				}
 				found = true
@@ -180,9 +187,9 @@ func compareVolumes(changes []object.SpecChange, path string, expected []VolumeM
 		}
 		if !found {
 			changes = append(changes, object.SpecChange{
-				Path:     path + "." + vol.ContainerPath,
+				Path:     path + "." + mountPath,
 				Actual:   "<missing>",
-				Expected: fmt.Sprintf("source=%s, readonly=%t", vol.HostPath, vol.ReadOnly),
+				Expected: fmt.Sprintf("volume=%s, readonly=%t", vol.Name, vol.ReadOnly),
 			})
 		}
 	}

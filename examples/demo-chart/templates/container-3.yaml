@@ -3,7 +3,6 @@ kind: CuteContainer
 apiVersion: cutepod/v1alpha0
 metadata:
   name: {{ .Release.Name }}-container-32
-  namespace: {{ .Release.Namespace }}
 spec:
   image: docker.io/strm/helloworld-http
   ports:

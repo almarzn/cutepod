@@ -7,7 +7,6 @@ import (
 	types "github.com/containers/podman/v5/libpod/define"
 	in "github.com/containers/podman/v5/pkg/inspect"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestCompare_NoChanges(t *testing.T) {
@@ -40,13 +39,9 @@ func TestCompare_NoChanges(t *testing.T) {
 		},
 	}
 
-	container := &CuteContainer{
-		TypeMeta: metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "container",
-		},
-		Spec: spec,
-	}
+	container := NewCuteContainer()
+	container.ObjectMeta.Name = "container"
+	container.Spec = spec
 
 	target := object.NewInstallTarget("test")
 
@@ -84,7 +79,9 @@ func TestCompare_HandleMissingUID(t *testing.T) {
 		HostConfig: &types.InspectContainerHostConfig{},
 	}
 
-	container := &CuteContainer{Spec: spec, ObjectMeta: metav1.ObjectMeta{Name: "ct"}}
+	container := NewCuteContainer()
+	container.ObjectMeta.Name = "ct"
+	container.Spec = spec
 	target := *object.NewInstallTarget("")
 
 	changes, err := Compare(target, container, inspect, data())
@@ -114,7 +111,9 @@ func TestCompare_ImageDefaultsToLatest(t *testing.T) {
 		HostConfig: &types.InspectContainerHostConfig{},
 	}
 
-	c := &CuteContainer{Spec: spec, ObjectMeta: metav1.ObjectMeta{Name: "ct"}}
+	c := NewCuteContainer()
+	c.ObjectMeta.Name = "ct"
+	c.Spec = spec
 	target := *object.NewInstallTarget("")
 
 	changes, err := Compare(target, c, inspect, data())
@@ -145,12 +144,11 @@ func TestCompare_NormalizeArgsFallback(t *testing.T) {
 		Args:       nil, // simulate podman inspect output
 	}
 
-	c := &CuteContainer{
-		Spec: CuteContainerSpec{
-			Image:   "myimage", // should normalize to myimage:latest
-			Command: []string{"/start.sh"},
-			Args:    nil, // This will trigger normalizeArgs fallback
-		},
+	c := NewCuteContainer()
+	c.Spec = CuteContainerSpec{
+		Image:   "myimage", // should normalize to myimage:latest
+		Command: []string{"/start.sh"},
+		Args:    nil, // This will trigger normalizeArgs fallback
 	}
 
 	target := *object.NewInstallTarget("test")
@@ -184,11 +182,10 @@ func TestCompare_NormalizeWorkindDir(t *testing.T) {
 		Args:       nil, // simulate podman inspect output
 	}
 
-	c := &CuteContainer{
-		Spec: CuteContainerSpec{
-			Image:      "myimage", // should normalize to myimage:latest
-			WorkingDir: "",        // This will trigger normalizeArgs fallback
-		},
+	c := NewCuteContainer()
+	c.Spec = CuteContainerSpec{
+		Image:      "myimage", // should normalize to myimage:latest
+		WorkingDir: "",        // This will trigger normalizeArgs fallback
 	}
 
 	target := *object.NewInstallTarget("test")

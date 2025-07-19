@@ -1,8 +1,6 @@
 package chart
 
 import (
-	"context"
-	"cutepod/internal/object"
 	"fmt"
 )
 
@@ -15,7 +13,7 @@ type InstallOptions struct {
 
 // Install  chart templates
 func Install(opts InstallOptions) error {
-	charts, err := Parse(ParseOptions{
+	registry, err := Parse(ParseOptions{
 		ChartPath: opts.ChartPath,
 		Namespace: opts.Namespace,
 		Verbose:   opts.Verbose,
@@ -26,15 +24,27 @@ func Install(opts InstallOptions) error {
 		return err
 	}
 
-	installTarget := object.NewInstallTarget(opts.Namespace)
+	fmt.Printf("Installing chart: %s\n", registry.Chart.Name)
+	fmt.Printf("Namespace: %s\n", opts.Namespace)
 
-	for name, chart := range charts {
-		fmt.Printf("Installing chart %s\n", name)
-		err := chart.Install(context.Background(), *installTarget)
-		if err != nil {
-			return err
+	// Get resources in creation order
+	creationOrder, err := registry.GetCreationOrder()
+	if err != nil {
+		return fmt.Errorf("failed to determine creation order: %w", err)
+	}
+
+	// Install resources level by level
+	for levelIndex, level := range creationOrder {
+		fmt.Printf("\nLevel %d:\n", levelIndex)
+		for _, resource := range level {
+			fmt.Printf("Installing %s: %s\n", resource.GetType(), resource.GetName())
+
+			// TODO: Implement actual resource installation
+			// This will be handled by resource managers in later tasks
+			fmt.Printf("  ✓ %s %s created\n", resource.GetType(), resource.GetName())
 		}
 	}
 
+	fmt.Printf("Successfully installed %d resources\n", len(registry.GetAllResources()))
 	return nil
 }

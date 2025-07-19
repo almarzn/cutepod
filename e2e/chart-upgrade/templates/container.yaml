@@ -3,7 +3,6 @@ kind: CuteContainer
 apiVersion: cutepod/v1alpha0
 metadata:
   name: {{ .Release.Name }}-container
-  namespace: {{ .Release.Namespace }}
 spec:
   image: {{ .Values.image }}
   ports:

@@ -2,14 +2,11 @@ package chart_test
 
 import (
 	"cutepod/internal/chart"
-	"cutepod/internal/container"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/go-test/deep"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestParse_ValidChart(t *testing.T) {
@@ -30,14 +27,13 @@ version: 0.1.0
 Image: ubuntu
 `), 0644))
 
-	// templates/deployment.yaml
+	// templates/deployment.yaml (note: removed namespace from template)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "deployment.yaml"), []byte(`
 ---
 kind: CuteContainer
 apiVersion: cutepod/v1alpha0
 metadata:
   name: {{ .Release.Name }}-container
-  namespace: {{ .Release.Namespace }}
 spec:
   image: {{ .Values.Image}}
 `), 0644))
@@ -48,24 +44,26 @@ spec:
 		Verbose:   true,
 	}
 
-	r, err := chart.Parse(opts)
+	registry, err := chart.Parse(opts)
 	require.NoError(t, err)
 
-	if diff := deep.Equal(map[string]interface{}{
-		"testchart-container": &container.CuteContainer{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "CuteContainer",
-				APIVersion: "cutepod/v1alpha0",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "testchart-container",
-				Namespace: "default",
-			},
-			Spec: container.CuteContainerSpec{
-				Image: "ubuntu",
-			},
-		},
-	}, r); diff != nil {
-		t.Error(diff)
-	}
+	// Verify chart metadata
+	require.Equal(t, "testchart", registry.Chart.Name)
+	require.Equal(t, "0.1.0", registry.Chart.Version)
+
+	// Get all resources
+	resources := registry.GetAllResources()
+	require.Len(t, resources, 1)
+
+	// Verify the container resource
+	resource := resources[0]
+	require.Equal(t, "testchart-container", resource.GetName())
+	require.Equal(t, "default", resource.GetNamespace())
+
+	// Verify labels were applied
+	labels := resource.GetLabels()
+	require.Equal(t, "default", labels["cutepod.io/namespace"])
+	require.Equal(t, "testchart", labels["cutepod.io/chart"])
+	require.Equal(t, "0.1.0", labels["cutepod.io/version"])
+	require.Equal(t, "cutepod", labels["cutepod.io/managed-by"])
 }
