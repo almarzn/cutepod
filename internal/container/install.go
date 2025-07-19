@@ -3,35 +3,32 @@ package container
 import (
 	"context"
 	"cutepod/internal/object"
+	"cutepod/internal/podman"
 	"fmt"
 	"os"
 
 	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/bindings/images"
 	"github.com/containers/podman/v5/pkg/specgen"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func (c *CuteContainer) Install(context context.Context, target object.InstallTarget) error {
-	ctx, err := bindings.NewConnection(context, GetPodmanURI())
-	if err != nil {
+func (c *CuteContainer) Install(ctx context.Context, client podman.PodmanClient, target object.InstallTarget) error {
+	if err := client.Connect(ctx); err != nil {
 		return err
 	}
+	defer client.Close()
 
-	err = c.pullImage(ctx)
+	err := c.pullImage(ctx, client)
 	if err != nil {
 		return fmt.Errorf("unable to pull image: %v", err)
 	}
 
-	options := &containers.CreateOptions{}
-	spec, err := containers.CreateWithSpec(ctx, c.buildSpec(target), options)
+	spec, err := client.CreateContainer(ctx, c.buildSpec(target))
 	if err != nil {
 		return fmt.Errorf("unable to create container: %v", err)
 	}
 
-	err = containers.Start(ctx, spec.ID, &containers.StartOptions{})
+	err = client.StartContainer(ctx, spec.ID)
 	if err != nil {
 		return fmt.Errorf("unable to start container: %v", err)
 	}
@@ -131,20 +128,18 @@ func (c *CuteContainer) getPortMappings() []types.PortMapping {
 	return portMappings
 }
 
-func (c *CuteContainer) pullImage(ctx context.Context) error {
-	image, err := images.GetImage(ctx, c.Spec.Image, &images.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("unable to check image: %v", err)
-	}
-
-	if image != nil {
+func (c *CuteContainer) pullImage(ctx context.Context, client podman.PodmanClient) error {
+	image, err := client.GetImage(ctx, c.Spec.Image)
+	if err == nil && image != nil {
 		return nil
 	}
 
-	options := new(images.PullOptions)
-	_, err = images.Pull(ctx, c.Spec.Image, options)
+	err = client.PullImage(ctx, c.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("unable to pull image: %v", err)
+	}
 
-	return err
+	return nil
 }
 
 func (c *CuteContainer) GetName() string {
@@ -155,27 +150,27 @@ func (c *CuteContainer) GetNamespace() string {
 	return c.Namespace
 }
 
-func (c *CuteContainer) ComputeChanges(ctx context.Context, t object.InstallTarget) ([]object.SpecChange, error) {
-	ctx, err := bindings.NewConnection(ctx, GetPodmanURI())
-	if err != nil {
+func (c *CuteContainer) ComputeChanges(ctx context.Context, client podman.PodmanClient, t object.InstallTarget) ([]object.SpecChange, error) {
+	if err := client.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("unable to connect to podman: %v", err)
 	}
+	defer client.Close()
 
-	inspect, err := containers.Inspect(ctx, t.GetContainerName(c), &containers.InspectOptions{})
+	inspect, err := client.InspectContainer(ctx, t.GetContainerName(c))
 	if err != nil {
 		return nil, fmt.Errorf("unable to inspect container: %v", err)
 	}
 
-	image, err := images.GetImage(ctx, c.Spec.Image, &images.GetOptions{})
+	image, err := client.GetImage(ctx, c.Spec.Image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to check image: %v", err)
 	}
 
-	return Compare(t, c, inspect, image.ImageData)
+	return Compare(t, c, inspect, image)
 }
 
-func (c *CuteContainer) Uninstall(ctx context.Context, t object.InstallTarget) error {
+func (c *CuteContainer) Uninstall(ctx context.Context, client podman.PodmanClient, t object.InstallTarget) error {
 	name := t.GetContainerName(c)
 
-	return RemoveContainer(ctx, name)
+	return RemoveContainer(ctx, client, name)
 }
