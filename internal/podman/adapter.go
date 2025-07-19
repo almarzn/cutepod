@@ -3,16 +3,19 @@ package podman
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
+	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
 	"github.com/containers/podman/v5/pkg/bindings/images"
+	"github.com/containers/podman/v5/pkg/bindings/network"
 	"github.com/containers/podman/v5/pkg/bindings/secrets"
 	"github.com/containers/podman/v5/pkg/bindings/volumes"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
+	podmantypes "github.com/containers/podman/v5/pkg/domain/entities/types"
 	"github.com/containers/podman/v5/pkg/inspect"
 	"github.com/containers/podman/v5/pkg/specgen"
 )
@@ -48,7 +51,7 @@ func (p *PodmanAdapter) Close() error {
 }
 
 // CreateContainer creates a new container
-func (p *PodmanAdapter) CreateContainer(ctx context.Context, spec *specgen.SpecGenerator) (*types.ContainerCreateResponse, error) {
+func (p *PodmanAdapter) CreateContainer(ctx context.Context, spec *specgen.SpecGenerator) (*podmantypes.ContainerCreateResponse, error) {
 	if p.ctx == nil {
 		if err := p.Connect(ctx); err != nil {
 			return nil, err
@@ -113,7 +116,7 @@ func (p *PodmanAdapter) RemoveContainer(ctx context.Context, name string) error 
 }
 
 // ListContainers lists containers
-func (p *PodmanAdapter) ListContainers(ctx context.Context, filters map[string][]string, all bool) ([]types.ListContainer, error) {
+func (p *PodmanAdapter) ListContainers(ctx context.Context, filters map[string][]string, all bool) ([]podmantypes.ListContainer, error) {
 	if p.ctx == nil {
 		if err := p.Connect(ctx); err != nil {
 			return nil, err
@@ -188,16 +191,40 @@ func (p *PodmanAdapter) CreateNetwork(ctx context.Context, spec NetworkSpec) (*N
 		}
 	}
 
-	// TODO: Implement network creation using available Podman bindings
-	// For now, return a placeholder implementation
-	return &NetworkInfo{
-		ID:      fmt.Sprintf("network-%s", spec.Name),
+	// Create network configuration
+	networkConfig := &nettypes.Network{
 		Name:    spec.Name,
 		Driver:  spec.Driver,
 		Options: spec.Options,
-		Subnet:  spec.Subnet,
 		Labels:  spec.Labels,
-	}, fmt.Errorf("network operations not yet implemented in adapter")
+	}
+
+	// Set subnet if provided
+	if spec.Subnet != "" {
+		_, subnet, err := net.ParseCIDR(spec.Subnet)
+		if err != nil {
+			return nil, fmt.Errorf("invalid subnet format: %v", err)
+		}
+		networkConfig.Subnets = []nettypes.Subnet{
+			{
+				Subnet: nettypes.IPNet{IPNet: *subnet},
+			},
+		}
+	}
+
+	response, err := network.Create(p.ctx, networkConfig)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create network: %v", err)
+	}
+
+	return &NetworkInfo{
+		ID:      response.ID,
+		Name:    response.Name,
+		Driver:  response.Driver,
+		Options: response.Options,
+		Subnet:  spec.Subnet,
+		Labels:  response.Labels,
+	}, nil
 }
 
 // RemoveNetwork removes a network
@@ -208,8 +235,12 @@ func (p *PodmanAdapter) RemoveNetwork(ctx context.Context, name string) error {
 		}
 	}
 
-	// TODO: Implement network removal using available Podman bindings
-	return fmt.Errorf("network operations not yet implemented in adapter")
+	_, err := network.Remove(p.ctx, name, &network.RemoveOptions{})
+	if err != nil {
+		return fmt.Errorf("unable to remove network: %v", err)
+	}
+
+	return nil
 }
 
 // ListNetworks lists networks
@@ -220,8 +251,32 @@ func (p *PodmanAdapter) ListNetworks(ctx context.Context, filters map[string][]s
 		}
 	}
 
-	// TODO: Implement network listing using available Podman bindings
-	return nil, fmt.Errorf("network operations not yet implemented in adapter")
+	list, err := network.List(p.ctx, &network.ListOptions{
+		Filters: filters,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list networks: %v", err)
+	}
+
+	var result []NetworkInfo
+	for _, net := range list {
+		// Extract subnet information
+		var subnet string
+		if len(net.Subnets) > 0 {
+			subnet = net.Subnets[0].Subnet.String()
+		}
+
+		result = append(result, NetworkInfo{
+			ID:      net.ID,
+			Name:    net.Name,
+			Driver:  net.Driver,
+			Options: net.Options,
+			Subnet:  subnet,
+			Labels:  net.Labels,
+		})
+	}
+
+	return result, nil
 }
 
 // InspectNetwork inspects a network
@@ -232,8 +287,25 @@ func (p *PodmanAdapter) InspectNetwork(ctx context.Context, name string) (*Netwo
 		}
 	}
 
-	// TODO: Implement network inspection using available Podman bindings
-	return nil, fmt.Errorf("network operations not yet implemented in adapter")
+	inspect, err := network.Inspect(p.ctx, name, &network.InspectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to inspect network: %v", err)
+	}
+
+	// Extract subnet information
+	var subnet string
+	if len(inspect.Subnets) > 0 {
+		subnet = inspect.Subnets[0].Subnet.String()
+	}
+
+	return &NetworkInfo{
+		ID:      inspect.ID,
+		Name:    inspect.Name,
+		Driver:  inspect.Driver,
+		Options: inspect.Options,
+		Subnet:  subnet,
+		Labels:  inspect.Labels,
+	}, nil
 }
 
 // ConnectContainerToNetwork connects a container to a network
@@ -244,8 +316,12 @@ func (p *PodmanAdapter) ConnectContainerToNetwork(ctx context.Context, container
 		}
 	}
 
-	// TODO: Implement container network connection using available Podman bindings
-	return fmt.Errorf("network operations not yet implemented in adapter")
+	err := network.Connect(p.ctx, networkName, containerName, nil)
+	if err != nil {
+		return fmt.Errorf("unable to connect container to network: %v", err)
+	}
+
+	return nil
 }
 
 // DisconnectContainerFromNetwork disconnects a container from a network
@@ -256,8 +332,12 @@ func (p *PodmanAdapter) DisconnectContainerFromNetwork(ctx context.Context, cont
 		}
 	}
 
-	// TODO: Implement container network disconnection using available Podman bindings
-	return fmt.Errorf("network operations not yet implemented in adapter")
+	err := network.Disconnect(p.ctx, networkName, containerName, nil)
+	if err != nil {
+		return fmt.Errorf("unable to disconnect container from network: %v", err)
+	}
+
+	return nil
 }
 
 // CreateVolume creates a new volume
@@ -268,7 +348,7 @@ func (p *PodmanAdapter) CreateVolume(ctx context.Context, spec VolumeSpec) (*Vol
 		}
 	}
 
-	createOptions := types.VolumeCreateOptions{
+	createOptions := podmantypes.VolumeCreateOptions{
 		Name:    spec.Name,
 		Driver:  spec.Driver,
 		Options: spec.Options,

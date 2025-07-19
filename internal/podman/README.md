@@ -191,7 +191,7 @@ func RemoveContainer(ctx context.Context, client podman.PodmanClient, name strin
 
 ## Future Enhancements
 
-- Network operations in PodmanAdapter need proper implementation once network bindings are available
+- Network operations in PodmanAdapter are fully implemented using Podman v5 network bindings
 - Additional error types and recovery mechanisms
 - Performance optimizations for bulk operations
 - Connection pooling for high-throughput scenarios
