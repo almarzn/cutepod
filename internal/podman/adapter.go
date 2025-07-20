@@ -510,8 +510,28 @@ func (p *PodmanAdapter) ListSecrets(ctx context.Context, filters map[string][]st
 		}
 	}
 
+	// Podman ListSecrets doesn't support label filters, so we need to filter manually
+	// Extract label filters and remove them from the filters map for the API call
+	labelFilters := make(map[string]string)
+	apiFilters := make(map[string][]string)
+
+	for key, values := range filters {
+		if key == "label" {
+			// Parse label filters in format "key=value"
+			for _, labelFilter := range values {
+				parts := strings.SplitN(labelFilter, "=", 2)
+				if len(parts) == 2 {
+					labelFilters[parts[0]] = parts[1]
+				}
+			}
+		} else {
+			// Pass through non-label filters
+			apiFilters[key] = values
+		}
+	}
+
 	list, err := secrets.List(p.ctx, &secrets.ListOptions{
-		Filters: filters,
+		Filters: apiFilters,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to list secrets: %v", err)
@@ -519,11 +539,31 @@ func (p *PodmanAdapter) ListSecrets(ctx context.Context, filters map[string][]st
 
 	var result []SecretInfo
 	for _, secret := range list {
-		result = append(result, SecretInfo{
+		secretInfo := SecretInfo{
 			ID:     secret.ID,
 			Name:   secret.Spec.Name,
 			Labels: secret.Spec.Labels,
-		})
+		}
+
+		// Apply manual label filtering
+		if len(labelFilters) > 0 {
+			matches := true
+			for labelKey, labelValue := range labelFilters {
+				if secretInfo.Labels == nil {
+					matches = false
+					break
+				}
+				if actualValue, exists := secretInfo.Labels[labelKey]; !exists || actualValue != labelValue {
+					matches = false
+					break
+				}
+			}
+			if !matches {
+				continue
+			}
+		}
+
+		result = append(result, secretInfo)
 	}
 
 	return result, nil
