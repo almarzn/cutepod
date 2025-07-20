@@ -1,6 +1,0 @@
-# Default values for demo-chart
-
-image: localhost/e2e-server:test
-message: Hello, world!
-containerPort: 8080
-hostPort: 18080

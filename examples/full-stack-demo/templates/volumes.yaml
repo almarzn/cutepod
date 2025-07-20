@@ -8,7 +8,6 @@ metadata:
     component: database
     type: persistent
 spec:
-  type: volume
   driver: local
   options:
     type: none
@@ -28,10 +27,7 @@ metadata:
     component: webapp
     type: bind-mount
 spec:
-  type: bind
-  hostPath: {{ .Values.volumes.webapp.hostPath }}
   options:
-    type: bind
     o: rw
   labels:
     usage: webapp-content
@@ -48,10 +44,7 @@ metadata:
     component: logging
     type: bind-mount
 spec:
-  type: bind
-  hostPath: {{ .Values.volumes.logs.hostPath }}
   options:
-    type: bind
     o: rw
   labels:
     usage: application-logs

@@ -18,7 +18,6 @@ func TestManifestRegistry_DependencyResolution(t *testing.T) {
 	// Create a volume (no dependencies)
 	volume := NewVolumeResource()
 	volume.ObjectMeta.Name = "web-data"
-	volume.Spec.Type = VolumeTypeVolume
 
 	// Create a container that depends on network and volume
 	container := NewContainerResource()

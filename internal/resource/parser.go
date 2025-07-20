@@ -213,14 +213,6 @@ func (p *ManifestParser) validateVolume(volume *VolumeResource) error {
 		return fmt.Errorf("volume name cannot be empty")
 	}
 
-	if volume.Spec.Type == "" {
-		volume.Spec.Type = VolumeTypeVolume // Default type
-	}
-
-	if volume.Spec.Type == VolumeTypeBind && volume.Spec.HostPath == "" {
-		return fmt.Errorf("bind volume requires hostPath")
-	}
-
 	return nil
 }
 
