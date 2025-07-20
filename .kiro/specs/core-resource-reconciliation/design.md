@@ -34,8 +34,8 @@ The main orchestrator that coordinates the reconciliation process:
 
 ```go
 type ReconciliationController interface {
-    Reconcile(ctx context.Context, manifests []Manifest, namespace string, dryRun bool) (*ReconciliationResult, error)
-    GetStatus(namespace string) (*ReconciliationStatus, error)
+    Reconcile(ctx context.Context, manifests []Manifest, chartName string, dryRun bool) (*ReconciliationResult, error)
+    GetStatus(chartName string) (*ReconciliationStatus, error)
 }
 
 type ReconciliationResult struct {
@@ -56,7 +56,7 @@ Each resource type has a dedicated manager implementing a common interface:
 ```go
 type ResourceManager interface {
     GetDesiredState(manifests []Manifest) ([]Resource, error)
-    GetActualState(ctx context.Context, namespace string) ([]Resource, error)
+    GetActualState(ctx context.Context, chartName string) ([]Resource, error)
     CreateResource(ctx context.Context, resource Resource) error
     UpdateResource(ctx context.Context, desired, actual Resource) error
     DeleteResource(ctx context.Context, resource Resource) error
@@ -148,7 +148,7 @@ type PodmanClient interface {
 
 ### Manifest Structure
 
-Cutepod uses Kubernetes-style YAML manifests without namespace fields. Objects are referenced by name within the same chart/namespace context:
+Cutepod uses Kubernetes-style YAML manifests without namespace fields. Objects are referenced by name within the same chart context:
 
 ```yaml
 apiVersion: cutepod/v1alpha0
@@ -241,7 +241,6 @@ type ResourceReference struct {
 ```go
 type ContainerResource struct {
     Name         string
-    Namespace    string
     Image        string
     Ports        []PortMapping
     Environment  map[string]string
@@ -264,7 +263,6 @@ type ResourceLimits struct {
 ```go
 type NetworkResource struct {
     Name      string
-    Namespace string
     Driver    string
     Options   map[string]string
     Subnet    string
@@ -277,7 +275,6 @@ type NetworkResource struct {
 ```go
 type VolumeResource struct {
     Name      string
-    Namespace string
     Type      VolumeType
     Driver    string
     Options   map[string]string
@@ -297,7 +294,6 @@ const (
 ```go
 type SecretResource struct {
     Name      string
-    Namespace string
     Data      map[string][]byte
     Type      SecretType
     Labels    map[string]string
@@ -392,7 +388,6 @@ All managed resources receive consistent labels:
 
 ```go
 const (
-    LabelNamespace = "cutepod.io/namespace"
     LabelChart     = "cutepod.io/chart"
     LabelVersion   = "cutepod.io/version"
     LabelManagedBy = "cutepod.io/managed-by"
@@ -409,10 +404,10 @@ The CLI follows a clean, intuitive structure with namespace provided at executio
 
 ```bash
 # Install resources from a chart
-cutepod install <namespace> <chart-path> [flags]
+cutepod install <chart-path> [flags]
 
 # Upgrade/reconcile existing resources
-cutepod upgrade <namespace> <chart-path> [flags]
+cutepod upgrade <chart-path> [flags]
 
 # Common flags
 --dry-run          Preview changes without applying them
@@ -435,8 +430,7 @@ The CLI output prioritizes clarity and actionability:
 #### Installation/Upgrade Output
 
 ```
-Installing chart: ./my-app
-Namespace: development
+Installing chart: ./my-app]
 
 ┌─────────────────────────────────────────────────────────────┐
 │ Reconciling Resources                                       │
@@ -471,7 +465,7 @@ Status: Success
 #### Dry-Run Output
 
 ```
-Preview: ./my-app → development namespace
+Preview: ./my-app → chart-name
 
 ┌─────────────────────────────────────────────────────────────┐
 │ Planned Changes                                             │
@@ -499,7 +493,7 @@ Run without --dry-run to apply changes
 
 ```
 Installing chart: ./my-app
-Namespace: development
+Chart name: development
 
 ┌─────────────────────────────────────────────────────────────┐
 │ Reconciling Resources                                       │
@@ -532,7 +526,7 @@ cutepod install development ./my-app --verbose
 
 ```
 Installing chart: ./my-app
-Namespace: development
+Chart name: test
 Chart version: 1.2.3
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -594,7 +588,7 @@ const (
 
 ```go
 type OutputFormatter interface {
-    FormatReconciliationStart(namespace, chartPath string)
+    FormatReconciliationStart(chartName, chartPath string)
     FormatResourceAction(action ResourceAction)
     FormatSummary(result ReconciliationResult)
     FormatError(err ReconciliationError)

@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"fmt"
 )
@@ -37,7 +38,7 @@ func (sm *SecretManager) GetDesiredState(manifests []Resource) ([]Resource, erro
 }
 
 // GetActualState retrieves current secret resources from Podman
-func (sm *SecretManager) GetActualState(ctx context.Context, namespace string) ([]Resource, error) {
+func (sm *SecretManager) GetActualState(ctx context.Context, chartName string) ([]Resource, error) {
 	connectedClient := podman.NewConnectedClient(sm.client)
 	defer connectedClient.Close()
 
@@ -49,7 +50,7 @@ func (sm *SecretManager) GetActualState(ctx context.Context, namespace string) (
 	secrets, err := podmanClient.ListSecrets(
 		ctx,
 		map[string][]string{
-			"label": {"cutepod.Namespace=" + namespace},
+			"label": {labels.GetChartLabelValue(chartName)},
 		},
 	)
 	if err != nil {
@@ -183,11 +184,6 @@ func (sm *SecretManager) convertPodmanSecretToResource(secret podman.SecretInfo)
 	resource := NewSecretResource()
 	resource.ObjectMeta.Name = secret.Name
 	resource.SetLabels(secret.Labels)
-
-	// Extract namespace from labels
-	if namespace, exists := secret.Labels["cutepod.Namespace"]; exists {
-		resource.SetNamespace(namespace)
-	}
 
 	// Set default secret type
 	resource.Spec.Type = SecretTypeOpaque

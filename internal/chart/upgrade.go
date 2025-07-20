@@ -11,7 +11,6 @@ import (
 
 type UpgradeOptions struct {
 	ChartPath string
-	Namespace string
 	DryRun    bool
 	Verbose   bool
 }
@@ -26,7 +25,6 @@ func Upgrade(opts UpgradeOptions) error {
 	// Parse the chart and get resources
 	registry, err := Parse(ParseOptions{
 		ChartPath: opts.ChartPath,
-		Namespace: opts.Namespace,
 		Verbose:   opts.Verbose,
 	})
 	if err != nil {
@@ -34,7 +32,6 @@ func Upgrade(opts UpgradeOptions) error {
 	}
 
 	fmt.Printf("Upgrading chart: %s\n", registry.Chart.Name)
-	fmt.Printf("Namespace: %s\n", opts.Namespace)
 
 	// Create reconciliation controller with Podman client
 	controller := resource.NewReconciliationControllerWithURI(resource.GetPodmanURI())
@@ -44,7 +41,7 @@ func Upgrade(opts UpgradeOptions) error {
 
 	// Execute reconciliation
 	ctx := context.Background()
-	result, err := controller.Reconcile(ctx, manifests, opts.Namespace, opts.DryRun)
+	result, err := controller.Reconcile(ctx, manifests, registry.Chart.Name, opts.DryRun)
 	if err != nil {
 		return fmt.Errorf("reconciliation failed: %w", err)
 	}

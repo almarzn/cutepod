@@ -149,22 +149,12 @@ func (sc *DefaultStateComparator) basicComparison(desired, actual Resource) (boo
 		reasons = append(reasons, "labels differ")
 	}
 
-	// Compare namespace
-	if desired.GetNamespace() != actual.GetNamespace() {
-		reasons = append(reasons, "namespace differs")
-	}
-
 	return len(reasons) > 0, reasons, nil
 }
 
 // determineUpdateReasons analyzes the differences between desired and actual resources
 func (sc *DefaultStateComparator) determineUpdateReasons(desired, actual Resource) []string {
 	reasons := make([]string, 0)
-
-	// Compare basic fields
-	if desired.GetNamespace() != actual.GetNamespace() {
-		reasons = append(reasons, "namespace changed")
-	}
 
 	desiredLabels := desired.GetLabels()
 	actualLabels := actual.GetLabels()

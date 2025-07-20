@@ -13,17 +13,16 @@ var installVerbose bool
 
 // installCmd represents the install command
 var installCmd = &cobra.Command{
-	Use:   "install <namespace> <chart>",
+	Use:   "install <chart>",
 	Short: "Install containers (use --dry-run to preview)",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		namespace, path := args[0], args[1]
+		path := args[0]
 
-		fmt.Printf("install called with namespace=%s path=%s dry-run=%v\n", namespace, path, installDryRun)
+		fmt.Printf("install called with path=%s dry-run=%v\n", path, installDryRun)
 
 		err := chart.Install(chart.InstallOptions{
 			ChartPath: path,
-			Namespace: namespace,
 			DryRun:    false,
 			Verbose:   false,
 		})

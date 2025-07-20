@@ -2,6 +2,7 @@ package chart
 
 import (
 	"bytes"
+	"cutepod/internal/labels"
 	"cutepod/internal/resource"
 	"fmt"
 	"io/fs"
@@ -77,15 +78,14 @@ func (c *ChartRegistry) loadValues() error {
 }
 
 // ParseTemplates parses all template files and populates the registry
-func (c *ChartRegistry) ParseTemplates(namespace string, verbose bool) error {
+func (c *ChartRegistry) ParseTemplates(verbose bool) error {
 	templatesDir := filepath.Join(c.ChartPath, "templates")
 
-	// Build template context (without namespace injection)
+	// Build template context
 	context := map[string]interface{}{
 		"Values": c.Values,
 		"Release": map[string]interface{}{
 			"Name": c.Chart.Name,
-			// Note: Namespace is NOT included in template context
 		},
 		"Chart": map[string]interface{}{
 			"Name":    c.Chart.Name,
@@ -148,8 +148,8 @@ func (c *ChartRegistry) ParseTemplates(namespace string, verbose bool) error {
 	// Get the populated registry from the parser
 	c.Registry = parser.GetRegistry()
 
-	// Apply namespace and labels to all resources
-	if err := c.applyNamespaceAndLabels(namespace); err != nil {
+	// Apply labels to all resources
+	if err := c.applyLabels(); err != nil {
 		return err
 	}
 
@@ -161,23 +161,11 @@ func (c *ChartRegistry) ParseTemplates(namespace string, verbose bool) error {
 	return nil
 }
 
-// applyNamespaceAndLabels applies namespace and standard labels to all resources
-func (c *ChartRegistry) applyNamespaceAndLabels(namespace string) error {
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	labels := map[string]string{
-		resource.LabelNamespace: namespace,
-		resource.LabelChart:     c.Chart.Name,
-		resource.LabelVersion:   c.Chart.Version,
-		resource.LabelManagedBy: resource.ManagedByValue,
-	}
+// applyLabels applies standard labels to all resources
+func (c *ChartRegistry) applyLabels() error {
+	labels := labels.GetStandardLabels(c.Chart.Name, c.Chart.Version)
 
 	for _, res := range c.Registry.GetAllResources() {
-		// Set namespace
-		res.SetNamespace(namespace)
-
 		// Merge with existing labels
 		existingLabels := res.GetLabels()
 		for k, v := range labels {

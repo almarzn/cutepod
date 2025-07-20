@@ -17,7 +17,6 @@ func init() {
 			chart.Lint(chart.ParseOptions{
 				ChartPath: args[0],
 				Verbose:   Verbose,
-				Namespace: "<namespace>",
 			})
 		},
 	}

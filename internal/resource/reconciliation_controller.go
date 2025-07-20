@@ -11,10 +11,10 @@ import (
 // ReconciliationController orchestrates the complete reconciliation workflow
 type ReconciliationController interface {
 	// Reconcile performs the full reconciliation workflow: parse → resolve → compare → execute
-	Reconcile(ctx context.Context, manifests []Resource, namespace string, dryRun bool) (*ReconciliationResult, error)
+	Reconcile(ctx context.Context, manifests []Resource, chartName string, dryRun bool) (*ReconciliationResult, error)
 
-	// GetStatus returns the current reconciliation status for a namespace
-	GetStatus(namespace string) (*ReconciliationStatus, error)
+	// GetStatus returns the current reconciliation status for a chartName
+	GetStatus(chartName string) (*ReconciliationStatus, error)
 }
 
 // ReconciliationResult contains the results of a reconciliation operation
@@ -25,12 +25,12 @@ type ReconciliationResult struct {
 	Errors           []*ReconciliationError `json:"errors"`
 	Summary          string                 `json:"summary"`
 	Duration         time.Duration          `json:"duration"`
-	Namespace        string                 `json:"namespace"`
+	ChartName        string                 `json:"chart_name"`
 }
 
-// ReconciliationStatus represents the current status of reconciliation for a namespace
+// ReconciliationStatus represents the current status of reconciliation for a chart name
 type ReconciliationStatus struct {
-	Namespace      string                 `json:"namespace"`
+	ChartName      string                 `json:"chart_name"`
 	LastReconciled time.Time              `json:"last_reconciled"`
 	ResourceCounts map[string]int         `json:"resource_counts"`
 	Status         string                 `json:"status"`
@@ -103,7 +103,7 @@ func NewReconciliationControllerWithURI(podmanURI string) ReconciliationControll
 }
 
 // Reconcile performs the complete reconciliation workflow: parse → resolve → compare → execute
-func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manifests []Resource, namespace string, dryRun bool) (*ReconciliationResult, error) {
+func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manifests []Resource, chartName string, dryRun bool) (*ReconciliationResult, error) {
 	startTime := time.Now()
 
 	result := &ReconciliationResult{
@@ -111,7 +111,7 @@ func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manife
 		UpdatedResources: make([]ResourceAction, 0),
 		DeletedResources: make([]ResourceAction, 0),
 		Errors:           make([]*ReconciliationError, 0),
-		Namespace:        namespace,
+		ChartName:        chartName,
 	}
 
 	// Validate input parameters
@@ -119,11 +119,6 @@ func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manife
 		result.Duration = time.Since(startTime)
 		result.Summary = "No resources to reconcile"
 		return result, nil
-	}
-
-	if namespace == "" {
-		return result, rc.addError(result, ErrorTypeValidation, ResourceReference{},
-			"namespace cannot be empty", nil, false)
 	}
 
 	// Step 1: Parse and validate manifests
@@ -152,7 +147,7 @@ func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manife
 	}
 
 	// Step 4: Get current state with error recovery
-	actualStateByType, err := rc.getCurrentStateWithRetry(ctx, namespace, result)
+	actualStateByType, err := rc.getCurrentStateWithRetry(ctx, chartName, result)
 	if err != nil {
 		return result, err
 	}
@@ -172,21 +167,21 @@ func (rc *DefaultReconciliationController) Reconcile(ctx context.Context, manife
 
 	// Step 7: Clean up orphaned resources with error handling
 	if !dryRun {
-		rc.cleanupOrphanedResourcesWithRecovery(ctx, result, manifests, actualStateByType, namespace, deletionOrder)
+		rc.cleanupOrphanedResourcesWithRecovery(ctx, result, manifests, actualStateByType, deletionOrder)
 	}
 
 	// Step 8: Update status and generate summary
-	rc.updateReconciliationStatus(namespace, result, startTime)
+	rc.updateReconciliationStatus(chartName, result, startTime)
 	result.Duration = time.Since(startTime)
 	result.Summary = rc.generateSummary(result)
 
 	return result, nil
 }
 
-// GetStatus returns the current reconciliation status for a namespace
-func (rc *DefaultReconciliationController) GetStatus(namespace string) (*ReconciliationStatus, error) {
+// GetStatus returns the current reconciliation status for a chart name
+func (rc *DefaultReconciliationController) GetStatus(chartName string) (*ReconciliationStatus, error) {
 	rc.mu.RLock()
-	cachedStatus, exists := rc.lastStatus[namespace]
+	cachedStatus, exists := rc.lastStatus[chartName]
 	rc.mu.RUnlock()
 
 	// If we have cached status, return it with current resource counts
@@ -196,7 +191,7 @@ func (rc *DefaultReconciliationController) GetStatus(namespace string) (*Reconci
 		defer cancel()
 
 		currentStatus := &ReconciliationStatus{
-			Namespace:      namespace,
+			ChartName:      chartName,
 			LastReconciled: cachedStatus.LastReconciled,
 			ResourceCounts: make(map[string]int),
 			Status:         cachedStatus.Status,
@@ -205,7 +200,7 @@ func (rc *DefaultReconciliationController) GetStatus(namespace string) (*Reconci
 
 		// Get current resource counts for each type
 		for resourceType, manager := range rc.managers {
-			resources, err := manager.GetActualState(ctx, namespace)
+			resources, err := manager.GetActualState(ctx, chartName)
 			if err != nil {
 				currentStatus.Errors = append(currentStatus.Errors, NewPodmanAPIError(
 					ResourceReference{Type: resourceType},
@@ -233,7 +228,7 @@ func (rc *DefaultReconciliationController) GetStatus(namespace string) (*Reconci
 	defer cancel()
 
 	status := &ReconciliationStatus{
-		Namespace:      namespace,
+		ChartName:      chartName,
 		ResourceCounts: make(map[string]int),
 		Status:         "unknown",
 		LastReconciled: time.Time{}, // Zero time indicates never reconciled
@@ -241,7 +236,7 @@ func (rc *DefaultReconciliationController) GetStatus(namespace string) (*Reconci
 
 	// Get current resource counts for each type
 	for resourceType, manager := range rc.managers {
-		resources, err := manager.GetActualState(ctx, namespace)
+		resources, err := manager.GetActualState(ctx, chartName)
 		if err != nil {
 			status.Errors = append(status.Errors, NewPodmanAPIError(
 				ResourceReference{Type: resourceType},
@@ -379,7 +374,7 @@ func (rc *DefaultReconciliationController) buildDependencyGraphWithRetry(ctx con
 }
 
 // getCurrentStateWithRetry gets current state with retry and error recovery
-func (rc *DefaultReconciliationController) getCurrentStateWithRetry(ctx context.Context, namespace string, result *ReconciliationResult) (map[ResourceType][]Resource, error) {
+func (rc *DefaultReconciliationController) getCurrentStateWithRetry(ctx context.Context, chartName string, result *ReconciliationResult) (map[ResourceType][]Resource, error) {
 	actualStateByType := make(map[ResourceType][]Resource)
 	const maxRetries = 3
 
@@ -389,7 +384,7 @@ func (rc *DefaultReconciliationController) getCurrentStateWithRetry(ctx context.
 
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			var err error
-			actualResources, err = manager.GetActualState(ctx, namespace)
+			actualResources, err = manager.GetActualState(ctx, chartName)
 			if err == nil {
 				break
 			}
@@ -680,7 +675,7 @@ func (rc *DefaultReconciliationController) executeDeleteWithRetry(ctx context.Co
 }
 
 // cleanupOrphanedResourcesWithRecovery removes orphaned resources with error handling
-func (rc *DefaultReconciliationController) cleanupOrphanedResourcesWithRecovery(ctx context.Context, result *ReconciliationResult, manifests []Resource, actualStateByType map[ResourceType][]Resource, namespace string, deletionOrder [][]Resource) {
+func (rc *DefaultReconciliationController) cleanupOrphanedResourcesWithRecovery(ctx context.Context, result *ReconciliationResult, manifests []Resource, actualStateByType map[ResourceType][]Resource, deletionOrder [][]Resource) {
 	// Create a set of desired resource names by type
 	desiredByType := make(map[ResourceType]map[string]bool)
 	for _, manifest := range manifests {
@@ -728,12 +723,12 @@ func (rc *DefaultReconciliationController) cleanupOrphanedResourcesWithRecovery(
 }
 
 // updateReconciliationStatus updates the internal status tracking
-func (rc *DefaultReconciliationController) updateReconciliationStatus(namespace string, result *ReconciliationResult, startTime time.Time) {
+func (rc *DefaultReconciliationController) updateReconciliationStatus(chartName string, result *ReconciliationResult, startTime time.Time) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
 	status := &ReconciliationStatus{
-		Namespace:      namespace,
+		ChartName:      chartName,
 		LastReconciled: startTime,
 		ResourceCounts: make(map[string]int),
 		Errors:         result.Errors,
@@ -783,7 +778,7 @@ func (rc *DefaultReconciliationController) updateReconciliationStatus(namespace 
 		}
 	}
 
-	rc.lastStatus[namespace] = status
+	rc.lastStatus[chartName] = status
 }
 
 // Helper methods

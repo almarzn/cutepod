@@ -8,7 +8,6 @@ import (
 type ParseOptions struct {
 	ChartPath string
 	Verbose   bool
-	Namespace string
 }
 
 // Parse parses a chart using the new ManifestRegistry pattern
@@ -18,7 +17,7 @@ func Parse(opts ParseOptions) (*ChartRegistry, error) {
 		return nil, fmt.Errorf("failed to create chart registry: %w", err)
 	}
 
-	if err := registry.ParseTemplates(opts.Namespace, opts.Verbose); err != nil {
+	if err := registry.ParseTemplates(opts.Verbose); err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
 

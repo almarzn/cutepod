@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"testing"
 )
@@ -130,9 +131,7 @@ func TestNetworkManager_GetActualState(t *testing.T) {
 		Name:   "test-network",
 		Driver: "bridge",
 		Subnet: "172.20.0.0/16",
-		Labels: map[string]string{
-			"cutepod.Namespace": "test-namespace",
-		},
+		Labels: labels.GetStandardLabels("test-name", "test-version"),
 	}
 
 	_, err := mockClient.CreateNetwork(context.Background(), spec)
@@ -140,7 +139,7 @@ func TestNetworkManager_GetActualState(t *testing.T) {
 		t.Fatalf("Failed to create mock network: %v", err)
 	}
 
-	actual, err := nm.GetActualState(context.Background(), "test-namespace")
+	actual, err := nm.GetActualState(context.Background(), "test-name")
 	if err != nil {
 		t.Fatalf("GetActualState failed: %v", err)
 	}
@@ -169,7 +168,6 @@ func TestNetworkManager_CreateResource(t *testing.T) {
 
 	network := NewNetworkResource()
 	network.ObjectMeta.Name = "test-network"
-	network.ObjectMeta.Namespace = "test-namespace"
 	network.Spec.Driver = "bridge"
 	network.Spec.Subnet = "172.20.0.0/16"
 	network.Spec.Gateway = "172.20.0.1"
@@ -195,14 +193,12 @@ func TestNetworkManager_UpdateResource(t *testing.T) {
 	// Create original network
 	original := NewNetworkResource()
 	original.ObjectMeta.Name = "test-network"
-	original.ObjectMeta.Namespace = "test-namespace"
 	original.Spec.Driver = "bridge"
 	original.Spec.Subnet = "172.20.0.0/16"
 
 	// Create updated network
 	updated := NewNetworkResource()
 	updated.ObjectMeta.Name = "test-network"
-	updated.ObjectMeta.Namespace = "test-namespace"
 	updated.Spec.Driver = "bridge"
 	updated.Spec.Subnet = "172.21.0.0/16"
 
@@ -235,7 +231,6 @@ func TestNetworkManager_DeleteResource(t *testing.T) {
 
 	network := NewNetworkResource()
 	network.ObjectMeta.Name = "test-network"
-	network.ObjectMeta.Namespace = "test-namespace"
 	network.Spec.Driver = "bridge"
 
 	// First create the network
@@ -300,14 +295,10 @@ func TestNetworkManager_BuildNetworkSpec(t *testing.T) {
 
 	network := NewNetworkResource()
 	network.ObjectMeta.Name = "test-network"
-	network.ObjectMeta.Namespace = "test-namespace"
 	network.Spec.Driver = "macvlan"
 	network.Spec.Subnet = "172.20.0.0/16"
 	network.Spec.Options = map[string]string{"mtu": "1500"}
-	network.SetLabels(map[string]string{
-		"cutepod.Namespace": "test-namespace",
-		"app":               "test-app",
-	})
+	network.SetLabels(labels.GetStandardLabels("test-name", "test-version"))
 
 	spec := nm.buildNetworkSpec(network)
 
@@ -327,8 +318,8 @@ func TestNetworkManager_BuildNetworkSpec(t *testing.T) {
 		t.Errorf("Expected mtu option '1500', got '%s'", spec.Options["mtu"])
 	}
 
-	if spec.Labels["cutepod.Namespace"] != "test-namespace" {
-		t.Errorf("Expected namespace label 'test-namespace', got '%s'", spec.Labels["cutepod.Namespace"])
+	if spec.Labels[labels.LabelChart] != "test-name" {
+		t.Errorf("Expected name label 'test-name', got '%s'", spec.Labels[labels.LabelChart])
 	}
 }
 
@@ -367,10 +358,7 @@ func TestNetworkManager_ConvertPodmanNetworkToResource(t *testing.T) {
 		Options: map[string]string{
 			"mtu": "1500",
 		},
-		Labels: map[string]string{
-			"cutepod.Namespace": "test-namespace",
-			"app":               "test-app",
-		},
+		Labels: labels.MergeLabels(labels.GetStandardLabels("test-name", "test-version"), map[string]string{"app": "test-app"}),
 	}
 
 	resource := nm.convertPodmanNetworkToResource(podmanNetwork)
@@ -378,11 +366,6 @@ func TestNetworkManager_ConvertPodmanNetworkToResource(t *testing.T) {
 	if resource.GetName() != "test-network" {
 		t.Errorf("Expected name 'test-network', got '%s'", resource.GetName())
 	}
-
-	if resource.GetNamespace() != "test-namespace" {
-		t.Errorf("Expected namespace 'test-namespace', got '%s'", resource.GetNamespace())
-	}
-
 	if resource.Spec.Driver != "bridge" {
 		t.Errorf("Expected driver 'bridge', got '%s'", resource.Spec.Driver)
 	}
@@ -395,13 +378,13 @@ func TestNetworkManager_ConvertPodmanNetworkToResource(t *testing.T) {
 		t.Errorf("Expected mtu option '1500', got '%s'", resource.Spec.Options["mtu"])
 	}
 
-	labels := resource.GetLabels()
-	if labels["cutepod.Namespace"] != "test-namespace" {
-		t.Errorf("Expected namespace label 'test-namespace', got '%s'", labels["cutepod.Namespace"])
+	l := resource.GetLabels()
+	if l[labels.LabelChart] != "test-name" {
+		t.Errorf("Expected name label 'test-name', got '%s'", l[labels.LabelChart])
 	}
 
-	if labels["app"] != "test-app" {
-		t.Errorf("Expected app label 'test-app', got '%s'", labels["app"])
+	if l["app"] != "test-app" {
+		t.Errorf("Expected app label 'test-app', got '%s'", l["app"])
 	}
 }
 
@@ -452,7 +435,7 @@ func TestNetworkManager_PodmanFailures(t *testing.T) {
 
 	// Test ListNetworks failure
 	mockClient.SetShouldFailOperation("ListNetworks", true)
-	_, err = nm.GetActualState(context.Background(), "test-namespace")
+	_, err = nm.GetActualState(context.Background(), "test-name")
 	if err == nil {
 		t.Error("Expected error when ListNetworks fails")
 	}

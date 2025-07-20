@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"fmt"
 	"os"
@@ -39,7 +40,7 @@ func (vm *VolumeManager) GetDesiredState(manifests []Resource) ([]Resource, erro
 }
 
 // GetActualState retrieves current volume resources from Podman
-func (vm *VolumeManager) GetActualState(ctx context.Context, namespace string) ([]Resource, error) {
+func (vm *VolumeManager) GetActualState(ctx context.Context, chartName string) ([]Resource, error) {
 	connectedClient := podman.NewConnectedClient(vm.client)
 	defer connectedClient.Close()
 
@@ -51,7 +52,7 @@ func (vm *VolumeManager) GetActualState(ctx context.Context, namespace string) (
 	volumes, err := podmanClient.ListVolumes(
 		ctx,
 		map[string][]string{
-			"label": {"cutepod.Namespace=" + namespace},
+			"label": {labels.GetChartLabelValue(chartName)},
 		},
 	)
 	if err != nil {
@@ -177,11 +178,6 @@ func (vm *VolumeManager) convertPodmanVolumeToResource(volume podman.VolumeInfo)
 	resource := NewVolumeResource()
 	resource.ObjectMeta.Name = volume.Name
 	resource.SetLabels(volume.Labels)
-
-	// Extract namespace from labels
-	if namespace, exists := volume.Labels["cutepod.Namespace"]; exists {
-		resource.SetNamespace(namespace)
-	}
 
 	// Convert volume spec
 	resource.Spec.Driver = volume.Driver

@@ -60,7 +60,7 @@ func performContainerOperations(client PodmanClient) error {
 		ContainerBasicConfig: specgen.ContainerBasicConfig{
 			Name: "example-container",
 			Labels: map[string]string{
-				"cutepod.Namespace": "example",
+				"cutepod.ChartName": "example",
 			},
 		},
 		ContainerStorageConfig: specgen.ContainerStorageConfig{
@@ -81,7 +81,7 @@ func performContainerOperations(client PodmanClient) error {
 
 	// List containers
 	containers, err := client.ListContainers(ctx, map[string][]string{
-		"label": {"cutepod.Namespace=example"},
+		"label": {"cutepod.ChartName=example"},
 	}, true)
 	if err != nil {
 		return fmt.Errorf("failed to list containers: %w", err)
@@ -94,7 +94,7 @@ func performContainerOperations(client PodmanClient) error {
 		Name:   "example-network",
 		Driver: "bridge",
 		Labels: map[string]string{
-			"cutepod.Namespace": "example",
+			"cutepod.ChartName": "example",
 		},
 	}
 
@@ -108,7 +108,7 @@ func performContainerOperations(client PodmanClient) error {
 		Name:   "example-volume",
 		Driver: "local",
 		Labels: map[string]string{
-			"cutepod.Namespace": "example",
+			"cutepod.ChartName": "example",
 		},
 	}
 
@@ -122,7 +122,7 @@ func performContainerOperations(client PodmanClient) error {
 		Name: "example-secret",
 		Data: []byte("secret-data"),
 		Labels: map[string]string{
-			"cutepod.Namespace": "example",
+			"cutepod.ChartName": "example",
 		},
 	}
 

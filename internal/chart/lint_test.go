@@ -27,7 +27,7 @@ version: 0.1.0
 Image: ubuntu
 `), 0644))
 
-	// templates/deployment.yaml (note: removed namespace from template)
+	// templates/deployment.yaml
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "deployment.yaml"), []byte(`
 ---
 kind: CuteContainer
@@ -40,7 +40,6 @@ spec:
 
 	opts := chart.ParseOptions{
 		ChartPath: dir,
-		Namespace: "default",
 		Verbose:   true,
 	}
 
@@ -58,12 +57,10 @@ spec:
 	// Verify the container resource
 	resource := resources[0]
 	require.Equal(t, "testchart-container", resource.GetName())
-	require.Equal(t, "default", resource.GetNamespace())
 
 	// Verify labels were applied
 	labels := resource.GetLabels()
-	require.Equal(t, "default", labels["cutepod.io/namespace"])
 	require.Equal(t, "testchart", labels["cutepod.io/chart"])
 	require.Equal(t, "0.1.0", labels["cutepod.io/version"])
-	require.Equal(t, "cutepod", labels["cutepod.io/managed-by"])
+	require.Equal(t, "cutepod-v1", labels["cutepod.io/managed-by"])
 }

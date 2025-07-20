@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"testing"
 
@@ -109,10 +110,8 @@ func TestContainerManager_GetActualState(t *testing.T) {
 	// Create a mock container using the proper API
 	spec := &specgen.SpecGenerator{
 		ContainerBasicConfig: specgen.ContainerBasicConfig{
-			Name: "test-container",
-			Labels: map[string]string{
-				"cutepod.Namespace": "test-namespace",
-			},
+			Name:   "test-container",
+			Labels: labels.GetStandardLabels("chart-name", "chart-version"),
 		},
 		ContainerStorageConfig: specgen.ContainerStorageConfig{
 			Image: "nginx:latest",
@@ -124,7 +123,7 @@ func TestContainerManager_GetActualState(t *testing.T) {
 		t.Fatalf("Failed to create mock container: %v", err)
 	}
 
-	actual, err := cm.GetActualState(context.Background(), "test-namespace")
+	actual, err := cm.GetActualState(context.Background(), "chart-name")
 	if err != nil {
 		t.Fatalf("GetActualState failed: %v", err)
 	}
@@ -144,7 +143,6 @@ func TestContainerManager_CreateResource(t *testing.T) {
 
 	container := NewContainerResource()
 	container.ObjectMeta.Name = "test-container"
-	container.ObjectMeta.Namespace = "test-namespace"
 	container.Spec.Image = "nginx:latest"
 	container.Spec.Ports = []ContainerPort{
 		{ContainerPort: 80, HostPort: 8080, Protocol: "TCP"},
@@ -175,13 +173,11 @@ func TestContainerManager_UpdateResource(t *testing.T) {
 	// Create original container
 	original := NewContainerResource()
 	original.ObjectMeta.Name = "test-container"
-	original.ObjectMeta.Namespace = "test-namespace"
 	original.Spec.Image = "nginx:1.20"
 
 	// Create updated container
 	updated := NewContainerResource()
 	updated.ObjectMeta.Name = "test-container"
-	updated.ObjectMeta.Namespace = "test-namespace"
 	updated.Spec.Image = "nginx:latest"
 
 	// First create the original container
@@ -213,7 +209,6 @@ func TestContainerManager_DeleteResource(t *testing.T) {
 
 	container := NewContainerResource()
 	container.ObjectMeta.Name = "test-container"
-	container.ObjectMeta.Namespace = "test-namespace"
 	container.Spec.Image = "nginx:latest"
 
 	// First create the container

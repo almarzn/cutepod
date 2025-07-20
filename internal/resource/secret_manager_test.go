@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"encoding/base64"
 	"testing"
@@ -62,20 +63,14 @@ func TestSecretManager_GetActualState(t *testing.T) {
 
 	// Add mock secrets to the client
 	secret1 := &podman.SecretInfo{
-		ID:   "secret1-id",
-		Name: "secret1",
-		Labels: map[string]string{
-			"cutepod.Namespace": "test-namespace",
-			"cutepod.Chart":     "test-chart",
-		},
+		ID:     "secret1-id",
+		Name:   "secret1",
+		Labels: labels.GetStandardLabels("test-name", "test-version"),
 	}
 	secret2 := &podman.SecretInfo{
-		ID:   "secret2-id",
-		Name: "secret2",
-		Labels: map[string]string{
-			"cutepod.Namespace": "test-namespace",
-			"cutepod.Chart":     "test-chart",
-		},
+		ID:     "secret2-id",
+		Name:   "secret2",
+		Labels: labels.GetStandardLabels("test-name", "test-version"),
 	}
 
 	// Manually add secrets to mock client's internal storage
@@ -92,7 +87,7 @@ func TestSecretManager_GetActualState(t *testing.T) {
 	})
 
 	// Test GetActualState
-	secrets, err := manager.GetActualState(context.Background(), "test-namespace")
+	secrets, err := manager.GetActualState(context.Background(), "test-name")
 	if err != nil {
 		t.Fatalf("GetActualState failed: %v", err)
 	}
@@ -105,23 +100,17 @@ func TestSecretManager_GetActualState(t *testing.T) {
 	if secret1Resource.GetName() != "secret1" {
 		t.Errorf("Expected first secret name 'secret1', got '%s'", secret1Resource.GetName())
 	}
-	if secret1Resource.GetNamespace() != "test-namespace" {
-		t.Errorf("Expected namespace 'test-namespace', got '%s'", secret1Resource.GetNamespace())
-	}
 	if secret1Resource.Spec.Type != SecretTypeOpaque {
 		t.Errorf("Expected secret type %s, got %s", SecretTypeOpaque, secret1Resource.Spec.Type)
 	}
-	if secret1Resource.GetLabels()["cutepod.Chart"] != "test-chart" {
-		t.Errorf("Expected chart label 'test-chart', got '%s'", secret1Resource.GetLabels()["cutepod.Chart"])
+	if secret1Resource.GetLabels()[labels.LabelChart] != "test-name" {
+		t.Errorf("Expected name label 'test-name', got '%s'", secret1Resource.GetLabels()[labels.LabelChart])
 	}
 
 	// Verify second secret
 	secret2Resource := secrets[1].(*SecretResource)
 	if secret2Resource.GetName() != "secret2" {
 		t.Errorf("Expected second secret name 'secret2', got '%s'", secret2Resource.GetName())
-	}
-	if secret2Resource.GetNamespace() != "test-namespace" {
-		t.Errorf("Expected namespace 'test-namespace', got '%s'", secret2Resource.GetNamespace())
 	}
 }
 
@@ -132,16 +121,12 @@ func TestSecretManager_CreateResource(t *testing.T) {
 	// Create test secret
 	secret := NewSecretResource()
 	secret.ObjectMeta.Name = "test-secret"
-	secret.ObjectMeta.Namespace = "test-namespace"
 	secret.Spec.Type = SecretTypeOpaque
 	secret.Spec.Data = map[string]string{
 		"username": base64.StdEncoding.EncodeToString([]byte("admin")),
 		"password": base64.StdEncoding.EncodeToString([]byte("secret123")),
 	}
-	secret.SetLabels(map[string]string{
-		"cutepod.Namespace": "test-namespace",
-		"cutepod.Chart":     "test-chart",
-	})
+	secret.SetLabels(labels.GetStandardLabels("test-name", "test-version"))
 
 	// Test CreateResource
 	err := manager.CreateResource(context.Background(), secret)
@@ -156,7 +141,7 @@ func TestSecretManager_CreateResource(t *testing.T) {
 
 	// Verify the secret exists in the mock client
 	secrets, err := mockClient.ListSecrets(context.Background(), map[string][]string{
-		"label": {"cutepod.Namespace=test-namespace"},
+		"label": {labels.GetChartLabelValue("test-name")},
 	})
 	if err != nil {
 		t.Fatalf("Failed to list secrets: %v", err)

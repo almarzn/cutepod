@@ -2,6 +2,7 @@ package podman
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"testing"
 
 	"github.com/containers/podman/v5/pkg/specgen"
@@ -28,10 +29,8 @@ func TestAdapterIntegrationWithExistingCode(t *testing.T) {
 		// Create a container (similar to what Install() does)
 		spec := &specgen.SpecGenerator{
 			ContainerBasicConfig: specgen.ContainerBasicConfig{
-				Name: "test-container",
-				Labels: map[string]string{
-					"cutepod.Namespace": "test-namespace",
-				},
+				Name:   "test-container",
+				Labels: labels.GetStandardLabels("chart-test", "1.0.0"),
 			},
 			ContainerStorageConfig: specgen.ContainerStorageConfig{
 				Image: "nginx:latest",
@@ -48,9 +47,8 @@ func TestAdapterIntegrationWithExistingCode(t *testing.T) {
 			return err
 		}
 
-		// List containers with namespace filter (similar to GetChanges())
 		containers, err := client.ListContainers(ctx, map[string][]string{
-			"label": {"cutepod.Namespace=test-namespace"},
+			"label": {labels.GetChartLabelValue("chart-test")},
 		}, true)
 		if err != nil {
 			return err

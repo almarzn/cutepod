@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"fmt"
 )
@@ -37,7 +38,7 @@ func (nm *NetworkManager) GetDesiredState(manifests []Resource) ([]Resource, err
 }
 
 // GetActualState retrieves current network resources from Podman
-func (nm *NetworkManager) GetActualState(ctx context.Context, namespace string) ([]Resource, error) {
+func (nm *NetworkManager) GetActualState(ctx context.Context, chartName string) ([]Resource, error) {
 	connectedClient := podman.NewConnectedClient(nm.client)
 	defer connectedClient.Close()
 
@@ -49,7 +50,7 @@ func (nm *NetworkManager) GetActualState(ctx context.Context, namespace string) 
 	networks, err := podmanClient.ListNetworks(
 		ctx,
 		map[string][]string{
-			"label": {"cutepod.Namespace=" + namespace},
+			"label": {labels.GetChartLabelValue(chartName)},
 		},
 	)
 	if err != nil {
@@ -165,11 +166,6 @@ func (nm *NetworkManager) convertPodmanNetworkToResource(network podman.NetworkI
 	resource := NewNetworkResource()
 	resource.ObjectMeta.Name = network.Name
 	resource.SetLabels(network.Labels)
-
-	// Extract namespace from labels
-	if namespace, exists := network.Labels["cutepod.Namespace"]; exists {
-		resource.SetNamespace(namespace)
-	}
 
 	// Convert network spec
 	resource.Spec.Driver = network.Driver

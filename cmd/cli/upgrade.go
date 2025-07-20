@@ -13,18 +13,17 @@ var upgradeVerbose bool
 
 // upgradeCmd represents the upgrade command
 var upgradeCmd = &cobra.Command{
-	Use:   "upgrade <namespace> <chart>",
+	Use:   "upgrade <chart>",
 	Short: "Reconcile and update containers (use --dry-run)",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		namespace, path := args[0], args[1]
+		path := args[0]
 		if upgradeVerbose {
-			fmt.Printf("upgrade called with namespace=%s path=%s dry-run=%v\n", namespace, path, installDryRun)
+			fmt.Printf("upgrade called with path=%s dry-run=%v\n", path, installDryRun)
 		}
 
 		err := chart.Upgrade(chart.UpgradeOptions{
 			ChartPath: path,
-			Namespace: namespace,
 			DryRun:    upgradeDryRun,
 			Verbose:   upgradeVerbose,
 		})

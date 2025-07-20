@@ -47,7 +47,7 @@ func (cm *ContainerManager) GetDesiredState(manifests []Resource) ([]Resource, e
 }
 
 // GetActualState retrieves current container resources from Podman
-func (cm *ContainerManager) GetActualState(ctx context.Context, namespace string) ([]Resource, error) {
+func (cm *ContainerManager) GetActualState(ctx context.Context, chartName string) ([]Resource, error) {
 	connectedClient := podman.NewConnectedClient(cm.client)
 	defer connectedClient.Close()
 
@@ -59,7 +59,7 @@ func (cm *ContainerManager) GetActualState(ctx context.Context, namespace string
 	containers, err := podmanClient.ListContainers(
 		ctx,
 		map[string][]string{
-			"label": {"cutepod.Namespace=" + namespace},
+			"label": {"cutepod.io/chart=" + chartName},
 		},
 		true,
 	)
@@ -222,7 +222,6 @@ func (cm *ContainerManager) convertPodmanContainerToResource(ctx context.Context
 	}
 
 	resource := NewContainerResource()
-	resource.SetNamespace(container.Labels["cutepod.Namespace"])
 	resource.ObjectMeta.Name = strings.TrimPrefix(container.Names[0], "/")
 	resource.SetLabels(container.Labels)
 

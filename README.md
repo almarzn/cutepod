@@ -68,10 +68,10 @@ my-chart/
 All Cutepod actions are ephemeral and executed via the CLI:
 
 ```bash
-cutepod lint <path-to-chart>           # Validate templates and YAML structure
-cutepod install <namespace> <chart>    # Install containers (use --dry-run to preview)
-cutepod upgrade <namespace> <chart>    # Reconcile and update containers (use --dry-run)
-cutepod reinit [namespace]             # Restart containers after system/podman restart
+cutepod lint <path-to-chart>       # Validate templates and YAML structure
+cutepod install <chart>            # Install containers (use --dry-run to preview)
+cutepod upgrade <chart>            # Reconcile and update containers (use --dry-run)
+cutepod reinit <chart>             # Restart containers after system/podman restart
 ````
 
 Use `--dry-run` with `install` or `upgrade` to preview changes without applying them.
@@ -88,7 +88,6 @@ Cutepod supports two types of secret resources:
 kind: CuteSecret
 metadata:
   name: db-creds
-  namespace: demo
 spec:
   type: Opaque
   data:
@@ -102,7 +101,6 @@ spec:
 kind: CuteSecretStore
 metadata:
   name: from-file
-  namespace: demo
 spec:
   provider: file
   path: /etc/secrets/db.yaml
@@ -122,7 +120,6 @@ Secrets are injected as Podman secrets, available via env or mounted file in `Cu
 kind: CuteExtension
 metadata:
   name: external-to-secret
-  namespace: demo
 spec:
   targetKind: CuteExternalSecret
   inputSchema: schemas/ext-secret.json
@@ -144,7 +141,6 @@ Here’s a set of minimal examples per kind:
 kind: CuteContainer
 metadata:
   name: web
-  namespace: demo
 spec:
   image: nginx:1.25
   ports:
@@ -165,7 +161,6 @@ spec:
 kind: CutePod
 metadata:
   name: web-pod
-  namespace: demo
 spec:
   containers:
     - name: web
@@ -178,7 +173,6 @@ spec:
 kind: CuteVolume
 metadata:
   name: static-data
-  namespace: demo
 spec:
   driver: local
   type: volume
@@ -194,7 +188,6 @@ spec:
 kind: CuteNetwork
 metadata:
   name: bridge-net
-  namespace: demo
 spec:
   driver: bridge
   options:

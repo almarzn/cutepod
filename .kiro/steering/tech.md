@@ -45,13 +45,13 @@ go test ./internal/chart -v
 cutepod lint <path-to-chart>
 
 # Install containers (preview with --dry-run)
-cutepod install <namespace> <chart> [--dry-run] [--verbose]
+cutepod install <chart> [--dry-run] [--verbose]
 
 # Reconcile and update containers
-cutepod upgrade <namespace> <chart> [--dry-run] [--verbose]
+cutepod upgrade <chart> [--dry-run] [--verbose]
 
 # Restart containers after system restart
-cutepod reinit [namespace]
+cutepod reinit <chart>
 ```
 
 ## Architecture Patterns
