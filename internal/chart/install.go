@@ -1,7 +1,12 @@
 package chart
 
 import (
+	"context"
+	"cutepod/internal/resource"
 	"fmt"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type InstallOptions struct {
@@ -11,40 +16,142 @@ type InstallOptions struct {
 	Verbose   bool
 }
 
-// Install  chart templates
+var (
+	installDoneStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("70"))
+	installFailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	installWarnStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+)
+
+// Install chart templates
 func Install(opts InstallOptions) error {
+	// Parse the chart and get resources
 	registry, err := Parse(ParseOptions{
 		ChartPath: opts.ChartPath,
 		Namespace: opts.Namespace,
 		Verbose:   opts.Verbose,
 	})
-
 	if err != nil {
-		fmt.Println(err)
-		return err
+		return fmt.Errorf("parse error: %w", err)
 	}
 
 	fmt.Printf("Installing chart: %s\n", registry.Chart.Name)
 	fmt.Printf("Namespace: %s\n", opts.Namespace)
 
-	// Get resources in creation order
-	creationOrder, err := registry.GetCreationOrder()
+	// Create reconciliation controller with Podman client
+	controller := resource.NewReconciliationControllerWithURI(resource.GetPodmanURI())
+
+	// Get all resources from the registry
+	manifests := registry.GetAllResources()
+
+	// Execute reconciliation (install is just reconciliation with empty current state)
+	ctx := context.Background()
+	result, err := controller.Reconcile(ctx, manifests, opts.Namespace, opts.DryRun)
 	if err != nil {
-		return fmt.Errorf("failed to determine creation order: %w", err)
+		return fmt.Errorf("installation failed: %w", err)
 	}
 
-	// Install resources level by level
-	for levelIndex, level := range creationOrder {
-		fmt.Printf("\nLevel %d:\n", levelIndex)
-		for _, resource := range level {
-			fmt.Printf("Installing %s: %s\n", resource.GetType(), resource.GetName())
+	// Display results
+	displayInstallationResult(result, opts.DryRun)
 
-			// TODO: Implement actual resource installation
-			// This will be handled by resource managers in later tasks
-			fmt.Printf("  ✓ %s %s created\n", resource.GetType(), resource.GetName())
+	// Return error if there were any non-recoverable errors
+	for _, reconciliationError := range result.Errors {
+		if !reconciliationError.Recoverable {
+			return fmt.Errorf("installation failed with non-recoverable errors")
 		}
 	}
 
-	fmt.Printf("Successfully installed %d resources\n", len(registry.GetAllResources()))
 	return nil
+}
+
+// displayInstallationResult displays the results of installation in a user-friendly format
+func displayInstallationResult(result *resource.ReconciliationResult, dryRun bool) {
+	if dryRun {
+		displayInstallDryRunResult(result)
+	} else {
+		displayInstallExecutionResult(result)
+	}
+}
+
+// displayInstallDryRunResult displays dry run results for installation
+func displayInstallDryRunResult(result *resource.ReconciliationResult) {
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render("🧪 Dry Run: Showing planned installation...\n"))
+
+	if len(result.CreatedResources) > 0 {
+		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Resources to be created:"))
+		for _, action := range result.CreatedResources {
+			fmt.Printf("  + %s %s\n", action.Type, action.Name)
+		}
+		fmt.Println()
+	}
+
+	if len(result.Errors) > 0 {
+		fmt.Println(installFailStyle.Bold(true).Render("Potential issues:"))
+		for _, err := range result.Errors {
+			fmt.Printf("  ! %s: %s\n", err.Resource.Name, err.Message)
+		}
+		fmt.Println()
+	}
+
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render("Run without --dry-run to install"))
+}
+
+// displayInstallExecutionResult displays actual installation results
+func displayInstallExecutionResult(result *resource.ReconciliationResult) {
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render("🚀 Installation Results\n"))
+
+	successCount := 0
+
+	if len(result.CreatedResources) > 0 {
+		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Installed:"))
+		for _, action := range result.CreatedResources {
+			if action.Error == "" {
+				fmt.Printf("  %s %s %s\n", installDoneStyle.Render("✓"), action.Type, action.Name)
+				successCount++
+			} else {
+				fmt.Printf("  %s %s %s - %s\n", installFailStyle.Render("✗"), action.Type, action.Name, action.Error)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Display any updates (shouldn't happen in fresh install, but could occur)
+	if len(result.UpdatedResources) > 0 {
+		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Updated:"))
+		for _, action := range result.UpdatedResources {
+			if action.Error == "" {
+				fmt.Printf("  %s %s %s\n", installDoneStyle.Render("✓"), action.Type, action.Name)
+				successCount++
+			} else {
+				fmt.Printf("  %s %s %s - %s\n", installFailStyle.Render("✗"), action.Type, action.Name, action.Error)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Display errors
+	if len(result.Errors) > 0 {
+		fmt.Println(installFailStyle.Bold(true).Render("Errors:"))
+		for _, err := range result.Errors {
+			if err.Recoverable {
+				fmt.Printf("  %s %s: %s\n", installWarnStyle.Render("⚠"), err.Resource.Name, err.Message)
+			} else {
+				fmt.Printf("  %s %s: %s\n", installFailStyle.Render("✗"), err.Resource.Name, err.Message)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Display summary
+	totalResources := len(result.CreatedResources) + len(result.UpdatedResources)
+	errorCount := len(result.Errors)
+
+	if errorCount == 0 {
+		fmt.Printf("%s\n", installDoneStyle.Bold(true).Render(fmt.Sprintf("🎉 Installation complete: %d resources installed in %v",
+			totalResources, result.Duration.Round(time.Millisecond))))
+	} else {
+		fmt.Printf("%s\n", installWarnStyle.Bold(true).Render(fmt.Sprintf("⚠ Installation completed with issues: %d succeeded, %d errors in %v",
+			successCount, errorCount, result.Duration.Round(time.Millisecond))))
+	}
+
+	fmt.Println(result.Summary)
 }

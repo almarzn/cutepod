@@ -1,0 +1,88 @@
+apiVersion: cutepod.io/v1
+kind: CuteContainer
+metadata:
+  name: {{ .Values.api.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: api
+    tier: backend
+    version: {{ .Values.app.version }}
+spec:
+  image: {{ .Values.api.image }}
+  command: ["node"]
+  args: ["-e", "
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      const response = {
+        message: 'Hello from {{ .Values.app.name }} API!',
+        timestamp: new Date().toISOString(),
+        version: '{{ .Values.app.version }}',
+        environment: process.env.NODE_ENV || 'development',
+        database: process.env.DATABASE_URL ? 'connected' : 'not configured',
+        cache: process.env.REDIS_URL ? 'connected' : 'not configured'
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(response, null, 2));
+    });
+    server.listen({{ .Values.api.port }}, '0.0.0.0', () => {
+      console.log('API server running on port {{ .Values.api.port }}');
+    });
+  "]
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: PORT
+      value: "{{ .Values.api.port }}"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.api.name }}
+          key: database-url
+    - name: REDIS_URL
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.api.name }}
+          key: redis-url
+    - name: JWT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.api.name }}
+          key: jwt-secret
+    - name: API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.api.name }}
+          key: api-key
+  ports:
+    - containerPort: {{ .Values.api.port }}
+      hostPort: 3000
+      protocol: TCP
+  volumes:
+    - name: {{ .Values.volumes.logs.name }}
+      mountPath: /var/log/app
+      readOnly: false
+  networks:
+    - {{ .Values.network.name }}
+  secrets:
+    - name: {{ .Values.secrets.api.name }}
+      env: true
+  restartPolicy: always
+  healthCheck:
+    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:{{ .Values.api.port }}/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    startPeriod: 45s
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    requests:
+      memory: 256Mi
+      cpu: 250m
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+  dependsOn:
+    - {{ .Values.database.name }}
+    - {{ .Values.cache.name }}

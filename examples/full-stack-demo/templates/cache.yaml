@@ -1,0 +1,51 @@
+apiVersion: cutepod.io/v1
+kind: CuteContainer
+metadata:
+  name: {{ .Values.cache.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: cache
+    tier: backend
+    version: {{ .Values.app.version }}
+spec:
+  image: {{ .Values.cache.image }}
+  command: ["redis-server"]
+  args: 
+    - "--appendonly"
+    - "yes"
+    - "--appendfsync"
+    - "everysec"
+    - "--maxmemory"
+    - "256mb"
+    - "--maxmemory-policy"
+    - "allkeys-lru"
+  env:
+    - name: REDIS_PORT
+      value: "{{ .Values.cache.port }}"
+  ports:
+    - containerPort: {{ .Values.cache.port }}
+      hostPort: 0  # Let Podman assign a random host port
+      protocol: TCP
+  volumes:
+    - name: {{ .Values.volumes.logs.name }}
+      mountPath: /var/log/redis
+      readOnly: false
+  networks:
+    - {{ .Values.network.name }}
+  restartPolicy: always
+  healthCheck:
+    test: ["CMD", "redis-cli", "ping"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    startPeriod: 30s
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: 200m
+    requests:
+      memory: 128Mi
+      cpu: 100m
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999

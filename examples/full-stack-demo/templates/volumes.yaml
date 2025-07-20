@@ -1,0 +1,58 @@
+# Database persistent volume
+apiVersion: cutepod.io/v1
+kind: CuteVolume
+metadata:
+  name: {{ .Values.volumes.database.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: database
+    type: persistent
+spec:
+  type: volume
+  driver: local
+  options:
+    type: none
+    o: bind
+  labels:
+    usage: database-storage
+    backup: required
+
+---
+# Web application content volume (bind mount)
+apiVersion: cutepod.io/v1
+kind: CuteVolume
+metadata:
+  name: {{ .Values.volumes.webapp.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: webapp
+    type: bind-mount
+spec:
+  type: bind
+  hostPath: {{ .Values.volumes.webapp.hostPath }}
+  options:
+    type: bind
+    o: rw
+  labels:
+    usage: webapp-content
+    backup: optional
+
+---
+# Application logs volume (bind mount)
+apiVersion: cutepod.io/v1
+kind: CuteVolume
+metadata:
+  name: {{ .Values.volumes.logs.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: logging
+    type: bind-mount
+spec:
+  type: bind
+  hostPath: {{ .Values.volumes.logs.hostPath }}
+  options:
+    type: bind
+    o: rw
+  labels:
+    usage: application-logs
+    backup: required

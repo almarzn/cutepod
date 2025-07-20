@@ -79,7 +79,7 @@
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_ | _Status: New implementation_
 
 - [ ] 5. Build centralized ReconciliationController
-  - [ ] 5.1 Create ReconciliationController interface and implementation
+  - [x] 5.1 Create ReconciliationController interface and implementation
     - Refactor existing chart.Upgrade logic into controller pattern
     - Implement full reconciliation workflow: parse → resolve → compare → execute
     - Add comprehensive error handling and recovery mechanisms
@@ -91,65 +91,104 @@
     - Integrate cleanup reporting with existing output system
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_ | _Status: New implementation_
 
-## Phase 4: Enhanced CLI and Output System
+## Phase 4: Critical Bug Fixes and Core Functionality
 
-- [ ] 6. Implement comprehensive resource labeling strategy
-  - [ ] 6.1 Create consistent labeling system
+- [ ] 6. Fix critical reconciliation and CLI issues (Core functionality fixes)
+  - [ ] 6.1 Fix dry-run functionality (Critical Bug Fix)
+    - Dry-run mode is not properly preventing actual resource creation/modification
+    - Resources are being created even in dry-run mode during state comparison
+    - Need to ensure dry-run only performs read operations and planning
+    - Fix core dry-run logic to prevent any state modifications
+    - _Requirements: 6.5, 10.1_ | _Status: Bug fix_
+
+  - [ ] 6.2 Improve error message readability and actionability
+    - Current error messages are too verbose and nested (e.g., "unable to create container: unable to create container: creating container storage...")
+    - Error messages should be concise and provide actionable guidance
+    - Implement error message truncation and user-friendly formatting
+    - Add suggestions for common issues (e.g., "Resource already exists. Run cleanup or use --force flag")
+    - _Requirements: 6.3, 6.4_ | _Status: Enhancement_
+
+  - [ ] 6.3 Fix upgrade command functionality (Critical Bug Fix)
+    - Upgrade command appears to not be working correctly
+    - Should properly detect existing resources and perform updates instead of creates
+    - Need to implement proper state comparison for upgrade scenarios
+    - Fix core upgrade logic to handle existing resources correctly
+    - _Requirements: 10.1, 10.2, 10.3_ | _Status: Bug fix_
+
+  - [ ] 6.4 Implement resource conflict resolution
+    - Add detection of existing resources with same names
+    - Implement --force flag to override existing resources
+    - Add resource cleanup suggestions in error messages
+    - Provide clear guidance on resolving naming conflicts
+    - _Requirements: 8.1, 8.2, 8.3_ | _Status: Enhancement_
+
+## Phase 5: Advanced Features and Enhanced UX
+
+- [ ] 7. Implement comprehensive resource labeling strategy
+  - [ ] 7.1 Create consistent labeling system
     - Extend existing cutepod.Namespace label to full strategy
     - Add chart name, version, and managed-by labels to all resources
     - Implement label-based resource querying and filtering
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_ | _Status: Refactor existing_
 
-- [ ] 7. Enhance CLI output formatting system
-  - [ ] 7.1 Refactor existing lipgloss output into OutputFormatter interface
+- [ ] 8. Enhance CLI output formatting system
+  - [ ] 8.1 Refactor existing lipgloss output into OutputFormatter interface
     - Create TableFormatter, JSONFormatter, YAMLFormatter implementations
     - Enhance existing tree-style output for all resource types
     - Improve status indicators and progress reporting
     - _Requirements: 6.3, 6.4_ | _Status: Refactor existing_
 
-  - [ ] 7.2 Implement comprehensive dry-run and verbose modes
-    - Enhance existing dry-run with detailed change previews
+  - [ ] 8.2 Implement enhanced verbose modes and advanced output features
     - Add verbose mode with timestamps and Podman command logging
-    - Create structured error reporting with actionable suggestions
+    - Create advanced output formatting options (JSON, YAML, table formats)
+    - Implement detailed resource inspection and debugging output
     - _Requirements: 6.5_ | _Status: Refactor existing_
 
-- [ ] 8. Integrate ReconciliationController with CLI commands
-  - [ ] 8.1 Refactor install command to use ReconciliationController
+- [ ] 9. Integrate ReconciliationController with CLI commands
+  - [ ] 9.1 Refactor install command to use ReconciliationController
     - Replace existing chart.Install with ReconciliationController.Reconcile
     - Enhance flag handling and output formatting
     - Add proper namespace handling at CLI level only
     - _Requirements: 6.1, 6.3, 6.5_ | _Status: Refactor existing_
 
-  - [ ] 8.2 Refactor upgrade command to use ReconciliationController
-    - Replace existing chart.Upgrade with ReconciliationController.Reconcile
-    - Enhance state comparison and idempotency logic
-    - Improve upgrade-specific output and error handling
-    - _Requirements: 6.1, 6.3, 10.1, 10.2_ | _Status: Refactor existing_
+  - [ ] 9.2 Enhance upgrade command with advanced features
+    - Add upgrade rollback and history tracking capabilities
+    - Implement upgrade validation and pre-flight checks
+    - Add upgrade progress tracking and status reporting
+    - Enhance upgrade-specific output formatting and user experience
+    - _Requirements: 6.1, 6.3, 10.1, 10.2_ | _Status: Enhancement_
 
-## Phase 5: Comprehensive Testing and Error Handling
+## Phase 6: Comprehensive Testing and Error Handling
 
-- [ ] 9. Implement comprehensive error handling and classification
-  - [ ] 9.1 Create error classification system
+- [ ] 10. Implement comprehensive error handling and classification
+  - [ ] 10.1 Create error classification system
     - Implement ReconciliationError with proper error types
     - Add retry logic for transient Podman API errors
     - Create graceful degradation for partial failures
     - _Requirements: 1.5, 2.5, 4.4, 7.3_ | _Status: Refactor existing_
 
-- [ ] 10. Create comprehensive unit and integration test suite
-  - [ ] 10.1 Unit tests for all engines and managers
+- [ ] 11. Create comprehensive unit and integration test suite
+  - [ ] 11.1 Unit tests for all engines and managers
     - Test StateComparator with various resource configurations
     - Test DependencyResolver with complex dependency scenarios
     - Test all ResourceManagers with mock PodmanClient
     - _Requirements: 10.1, 10.3, 10.5_ | _Status: New implementation_
 
-  - [ ] 10.2 Integration tests for ReconciliationController
+  - [ ] 11.2 Integration tests for ReconciliationController
     - Test complete reconciliation cycles with real Podman instances
     - Test dependency failure scenarios and recovery
     - Verify idempotency across multiple reconciliation runs
     - _Requirements: 10.1, 10.4, 7.1, 7.2, 7.3_ | _Status: New implementation_
 
-  - [ ] 10.3 CLI and output formatting tests
+  - [ ] 11.3 CLI and output formatting tests
     - Test all OutputFormatter implementations
     - Test CLI command integration with various scenarios
     - Test error handling and user experience flows
     - _Requirements: 6.3, 6.4, 6.5_ | _Status: New implementation_
+
+  - [ ] 11.4 Bug fix validation tests
+    - Test dry-run mode to ensure no actual resource modifications
+    - Test error message formatting and readability
+    - Test upgrade command with existing resources
+    - Test resource conflict resolution scenarios
+    - _Requirements: 6.1, 6.2, 6.3, 6.4_ | _Status: New implementation_

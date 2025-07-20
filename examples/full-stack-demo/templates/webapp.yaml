@@ -1,0 +1,216 @@
+# Web Application - Instance 1
+apiVersion: cutepod.io/v1
+kind: CuteContainer
+metadata:
+  name: {{ .Values.webapp.name }}-1
+  labels:
+    app: {{ .Values.app.name }}
+    component: webapp
+    tier: frontend
+    version: {{ .Values.app.version }}
+    instance: "1"
+spec:
+  image: {{ .Values.webapp.image }}
+  command: ["sh"]
+  args: ["-c", "
+    echo 'Creating demo web content...';
+    mkdir -p /usr/share/nginx/html;
+    cat > /usr/share/nginx/html/index.html << 'EOF'
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{{ .Values.app.name }} - Instance 1</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+            .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .header { color: #333; border-bottom: 2px solid #007acc; padding-bottom: 10px; }
+            .info { margin: 20px 0; }
+            .api-test { background: #e8f4fd; padding: 15px; border-radius: 4px; margin: 20px 0; }
+            button { background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #005a9e; }
+            #api-result { margin-top: 10px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <div class=\"container\">
+            <h1 class=\"header\">{{ .Values.app.name }} - Web Instance 1</h1>
+            <div class=\"info\">
+                <p><strong>Version:</strong> {{ .Values.app.version }}</p>
+                <p><strong>Container:</strong> {{ .Values.webapp.name }}-1</p>
+                <p><strong>Network:</strong> {{ .Values.network.name }}</p>
+                <p><strong>Status:</strong> <span style=\"color: green;\">Running</span></p>
+            </div>
+            <div class=\"api-test\">
+                <h3>API Connection Test</h3>
+                <button onclick=\"testAPI()\">Test API Connection</button>
+                <div id=\"api-result\"></div>
+            </div>
+        </div>
+        <script>
+            async function testAPI() {
+                const resultDiv = document.getElementById('api-result');
+                resultDiv.innerHTML = 'Testing API connection...';
+                try {
+                    const response = await fetch('http://{{ .Values.api.name }}:{{ .Values.api.port }}');
+                    const data = await response.json();
+                    resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                    resultDiv.innerHTML = 'API connection failed: ' + error.message;
+                }
+            }
+        </script>
+    </body>
+    </html>
+    EOF
+    echo 'Starting nginx...';
+    nginx -g 'daemon off;'
+  "]
+  env:
+    - name: NGINX_PORT
+      value: "{{ .Values.webapp.port }}"
+    - name: INSTANCE_ID
+      value: "1"
+  ports:
+    - containerPort: {{ .Values.webapp.port }}
+      hostPort: 8080
+      protocol: TCP
+  volumes:
+    - name: {{ .Values.volumes.webapp.name }}
+      mountPath: /usr/share/nginx/html/static
+      readOnly: false
+    - name: {{ .Values.volumes.logs.name }}
+      mountPath: /var/log/nginx
+      readOnly: false
+  networks:
+    - {{ .Values.network.name }}
+  secrets:
+    - name: {{ .Values.secrets.tls.name }}
+      path: /etc/nginx/ssl
+  restartPolicy: always
+  healthCheck:
+    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:{{ .Values.webapp.port }}"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    startPeriod: 30s
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: 200m
+    requests:
+      memory: 128Mi
+      cpu: 100m
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
+  dependsOn:
+    - {{ .Values.api.name }}
+
+---
+# Web Application - Instance 2
+apiVersion: cutepod.io/v1
+kind: CuteContainer
+metadata:
+  name: {{ .Values.webapp.name }}-2
+  labels:
+    app: {{ .Values.app.name }}
+    component: webapp
+    tier: frontend
+    version: {{ .Values.app.version }}
+    instance: "2"
+spec:
+  image: {{ .Values.webapp.image }}
+  command: ["sh"]
+  args: ["-c", "
+    echo 'Creating demo web content...';
+    mkdir -p /usr/share/nginx/html;
+    cat > /usr/share/nginx/html/index.html << 'EOF'
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{{ .Values.app.name }} - Instance 2</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f0f8ff; }
+            .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .header { color: #333; border-bottom: 2px solid #28a745; padding-bottom: 10px; }
+            .info { margin: 20px 0; }
+            .api-test { background: #e8f5e8; padding: 15px; border-radius: 4px; margin: 20px 0; }
+            button { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #1e7e34; }
+            #api-result { margin-top: 10px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <div class=\"container\">
+            <h1 class=\"header\">{{ .Values.app.name }} - Web Instance 2</h1>
+            <div class=\"info\">
+                <p><strong>Version:</strong> {{ .Values.app.version }}</p>
+                <p><strong>Container:</strong> {{ .Values.webapp.name }}-2</p>
+                <p><strong>Network:</strong> {{ .Values.network.name }}</p>
+                <p><strong>Status:</strong> <span style=\"color: green;\">Running</span></p>
+            </div>
+            <div class=\"api-test\">
+                <h3>API Connection Test</h3>
+                <button onclick=\"testAPI()\">Test API Connection</button>
+                <div id=\"api-result\"></div>
+            </div>
+        </div>
+        <script>
+            async function testAPI() {
+                const resultDiv = document.getElementById('api-result');
+                resultDiv.innerHTML = 'Testing API connection...';
+                try {
+                    const response = await fetch('http://{{ .Values.api.name }}:{{ .Values.api.port }}');
+                    const data = await response.json();
+                    resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                    resultDiv.innerHTML = 'API connection failed: ' + error.message;
+                }
+            }
+        </script>
+    </body>
+    </html>
+    EOF
+    echo 'Starting nginx...';
+    nginx -g 'daemon off;'
+  "]
+  env:
+    - name: NGINX_PORT
+      value: "{{ .Values.webapp.port }}"
+    - name: INSTANCE_ID
+      value: "2"
+  ports:
+    - containerPort: {{ .Values.webapp.port }}
+      hostPort: 8081
+      protocol: TCP
+  volumes:
+    - name: {{ .Values.volumes.webapp.name }}
+      mountPath: /usr/share/nginx/html/static
+      readOnly: false
+    - name: {{ .Values.volumes.logs.name }}
+      mountPath: /var/log/nginx
+      readOnly: false
+  networks:
+    - {{ .Values.network.name }}
+  secrets:
+    - name: {{ .Values.secrets.tls.name }}
+      path: /etc/nginx/ssl
+  restartPolicy: always
+  healthCheck:
+    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:{{ .Values.webapp.port }}"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    startPeriod: 30s
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: 200m
+    requests:
+      memory: 128Mi
+      cpu: 100m
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
+  dependsOn:
+    - {{ .Values.api.name }}

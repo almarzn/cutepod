@@ -172,9 +172,13 @@ func (c *ContainerResource) Validate(yml string) []error {
 		addErr("$.spec.gid", "gid must be >= 0")
 	}
 
-	validRestart := map[string]bool{"Always": true, "OnFailure": true, "Never": true}
+	validRestart := map[string]bool{
+		"no": true, "on-failure": true, "always": true, "unless-stopped": true,
+		// Also accept capitalized versions for backward compatibility
+		"Always": true, "OnFailure": true, "Never": true,
+	}
 	if c.Spec.RestartPolicy != "" && !validRestart[c.Spec.RestartPolicy] {
-		addErr("$.spec.restartPolicy", "invalid restartPolicy: must be Always, OnFailure, or Never")
+		addErr("$.spec.restartPolicy", "invalid restartPolicy: must be no, on-failure, always, unless-stopped, Always, OnFailure, or Never")
 	}
 
 	for i, env := range c.Spec.Env {

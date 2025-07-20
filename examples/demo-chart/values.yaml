@@ -1,9 +1,0 @@
-# Default values for demo-chart
-
-image:
-  repository: nginx
-  tag: 1.25
-  pullPolicy: IfNotPresent
-
-service:
-  port: 80

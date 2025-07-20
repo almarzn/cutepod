@@ -1,0 +1,17 @@
+apiVersion: cutepod.io/v1
+kind: CuteNetwork
+metadata:
+  name: {{ .Values.network.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    version: {{ .Values.app.version }}
+    component: network
+spec:
+  driver: bridge
+  subnet: {{ .Values.network.subnet }}
+  gateway: {{ .Values.network.gateway }}
+  options:
+    mtu: "1500"
+  labels:
+    environment: demo
+    managed-by: cutepod

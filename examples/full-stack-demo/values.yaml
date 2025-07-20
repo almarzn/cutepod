@@ -1,0 +1,60 @@
+# Application configuration
+app:
+  name: full-stack-demo
+  version: "1.0.0"
+  replicas: 2
+
+# Database configuration
+database:
+  image: docker.io/library/postgres:15-alpine
+  name: postgres-db
+  port: 5432
+  user: demouser
+  password: demopass123
+  database: demodb
+
+# Web application configuration
+webapp:
+  image: docker.io/library/nginx:1.25-alpine
+  name: webapp
+  port: 80
+  replicas: 2
+
+# Redis cache configuration
+cache:
+  image: docker.io/library/redis:7-alpine
+  name: redis-cache
+  port: 6379
+
+# API service configuration
+api:
+  image: docker.io/library/node:18-alpine
+  name: api-service
+  port: 3000
+
+# Network configuration
+network:
+  name: demo-network
+  subnet: "172.20.0.0/16"
+  gateway: "172.20.0.1"
+
+# Volume configuration
+volumes:
+  database:
+    name: postgres-data
+    size: "1Gi"
+  webapp:
+    name: webapp-content
+    hostPath: "/tmp/webapp-content"
+  logs:
+    name: app-logs
+    hostPath: "/tmp/app-logs"
+
+# Secret configuration
+secrets:
+  database:
+    name: db-credentials
+  api:
+    name: api-keys
+  tls:
+    name: tls-certs
