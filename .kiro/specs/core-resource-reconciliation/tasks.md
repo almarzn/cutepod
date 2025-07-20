@@ -60,7 +60,7 @@
     - Add container-specific dependency resolution (networks, volumes, secrets)
     - _Requirements: 1.1, 1.2, 1.3, 1.4_ | _Status: Refactor existing_
 
-  - [ ] 4.2 Create NetworkManager following ResourceManager pattern
+  - [x] 4.2 Create NetworkManager following ResourceManager pattern
     - Implement CuteNetwork manifest parsing and validation
     - Add Podman network operations through PodmanClient interface
     - Create network state comparison and change detection
