@@ -72,7 +72,7 @@
     - Create volume state comparison and dependency handling
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_ | _Status: New implementation_
 
-  - [ ] 4.4 Create SecretManager following ResourceManager pattern
+  - [x] 4.4 Create SecretManager following ResourceManager pattern
     - Implement CuteSecret manifest parsing with base64 handling
     - Add Podman secret operations through PodmanClient interface
     - Create secret state comparison and injection logic
