@@ -1,0 +1,13 @@
+---
+kind: CuteContainer
+apiVersion: cutepod/v1alpha0
+metadata:
+  name: {{ .Release.Name }}-container
+spec:
+  image: {{ .Values.image }}
+  ports:
+    - containerPort: {{ .Values.containerPort }}
+      hostPort: {{ .Values.hostPort }}
+  env:
+    - name: MESSAGE
+      value: {{ .Values.message }}

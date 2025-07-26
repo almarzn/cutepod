@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"cutepod/internal/podman"
+	"os"
 	"strings"
 	"testing"
 )
@@ -28,9 +29,11 @@ func TestVolumeManager_GetDesiredState(t *testing.T) {
 	// Create test manifests
 	volume1 := NewVolumeResource()
 	volume1.ObjectMeta.Name = "volume1"
+	volume1.Spec.Type = VolumeTypeVolume
 
 	volume2 := NewVolumeResource()
 	volume2.ObjectMeta.Name = "volume2"
+	volume2.Spec.Type = VolumeTypeBind
 
 	container := NewContainerResource()
 	container.ObjectMeta.Name = "container1"
@@ -60,6 +63,7 @@ func TestVolumeManager_CreateResource_NamedVolume(t *testing.T) {
 
 	volume := NewVolumeResource()
 	volume.ObjectMeta.Name = "test-volume"
+	volume.Spec.Type = VolumeTypeVolume
 	volume.Spec.Driver = "local"
 
 	ctx := context.Background()
@@ -83,6 +87,76 @@ func TestVolumeManager_CreateResource_NamedVolume(t *testing.T) {
 	}
 }
 
+func TestVolumeManager_CreateResource_BindMount(t *testing.T) {
+	mockClient := podman.NewMockPodmanClient()
+	vm := NewVolumeManager(mockClient)
+
+	// Create a temporary directory for testing
+	tempDir := t.TempDir()
+
+	volume := NewVolumeResource()
+	volume.ObjectMeta.Name = "test-bind"
+	volume.Spec.Type = VolumeTypeBind
+	volume.Spec.HostPath = tempDir
+
+	ctx := context.Background()
+	err := vm.CreateResource(ctx, volume)
+	if err != nil {
+		t.Fatalf("CreateResource failed: %v", err)
+	}
+
+	// Verify the directory exists
+	if _, err := os.Stat(tempDir); os.IsNotExist(err) {
+		t.Errorf("Expected directory %s to exist", tempDir)
+	}
+
+	// Verify no Podman volume was created for bind mount
+	_, err = mockClient.InspectVolume(ctx, "test-bind")
+	if err == nil {
+		t.Error("Expected no Podman volume to be created for bind mount")
+	}
+}
+
+func TestVolumeManager_CreateResource_BindMount_InvalidPath(t *testing.T) {
+	mockClient := podman.NewMockPodmanClient()
+	vm := NewVolumeManager(mockClient)
+
+	volume := NewVolumeResource()
+	volume.ObjectMeta.Name = "test-bind"
+	volume.Spec.Type = VolumeTypeBind
+	volume.Spec.HostPath = "relative/path" // Invalid relative path
+
+	ctx := context.Background()
+	err := vm.CreateResource(ctx, volume)
+	if err == nil {
+		t.Fatal("Expected error for relative path, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "must be an absolute path") {
+		t.Errorf("Expected error about absolute path, got: %v", err)
+	}
+}
+
+func TestVolumeManager_CreateResource_BindMount_MissingHostPath(t *testing.T) {
+	mockClient := podman.NewMockPodmanClient()
+	vm := NewVolumeManager(mockClient)
+
+	volume := NewVolumeResource()
+	volume.ObjectMeta.Name = "test-bind"
+	volume.Spec.Type = VolumeTypeBind
+	// Missing HostPath
+
+	ctx := context.Background()
+	err := vm.CreateResource(ctx, volume)
+	if err == nil {
+		t.Fatal("Expected error for missing hostPath, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "hostPath is required") {
+		t.Errorf("Expected error about required hostPath, got: %v", err)
+	}
+}
+
 func TestVolumeManager_CompareResources(t *testing.T) {
 	mockClient := podman.NewMockPodmanClient()
 	vm := NewVolumeManager(mockClient)
@@ -91,12 +165,14 @@ func TestVolumeManager_CompareResources(t *testing.T) {
 	volume1 := &VolumeResource{
 		BaseResource: BaseResource{ResourceType: ResourceTypeVolume},
 		Spec: CuteVolumeSpec{
+			Type:   VolumeTypeVolume,
 			Driver: "local",
 		},
 	}
 	volume2 := &VolumeResource{
 		BaseResource: BaseResource{ResourceType: ResourceTypeVolume},
 		Spec: CuteVolumeSpec{
+			Type:   VolumeTypeVolume,
 			Driver: "local",
 		},
 	}
@@ -108,6 +184,17 @@ func TestVolumeManager_CompareResources(t *testing.T) {
 
 	if !match {
 		t.Error("Expected identical volumes to match")
+	}
+
+	// Test different types
+	volume2.Spec.Type = VolumeTypeBind
+	match, err = vm.CompareResources(volume1, volume2)
+	if err != nil {
+		t.Fatalf("CompareResources failed: %v", err)
+	}
+
+	if match {
+		t.Error("Expected volumes with different types to not match")
 	}
 }
 

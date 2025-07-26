@@ -8,7 +8,6 @@
     - Define ResourceType, ResourceReference, and ResourceManager interfaces
     - Create ReconciliationError with proper error classification
     - _Requirements: 6.4, 9.1_ | _Status: Refactor existing_
-
   - [x] 1.2 Abstract Podman client interactions
     - Extract existing Podman bindings into PodmanClient interface
     - Create adapter pattern for container, network, volume, secret operations
@@ -16,6 +15,9 @@
     - _Requirements: 1.1, 2.1, 3.1, 4.1_ | _Status: Refactor existing_
 
   - [x] 1.3 Build manifest registry and object referencing system
+
+
+
     - Refactor chart parsing to use ManifestRegistry pattern
     - Implement name-based cross-resource referencing
     - Remove namespace injection from manifest templates
@@ -23,27 +25,27 @@
 
 ## Phase 2: State Comparison and Dependency Engines
 
-- [x] 2. Implement State Comparison Engine
-  - [x] 2.1 Create StateComparator interface and implementation
+- [ ] 2. Implement State Comparison Engine
+  - [ ] 2.1 Create StateComparator interface and implementation
     - Extract existing container.Compare logic into generic StateComparator
     - Implement StateDiff structure with create/update/delete operations
     - Add resource fingerprinting for idempotency checks
     - _Requirements: 10.1, 10.3, 10.5_ | _Status: Refactor existing_
 
-  - [x] 2.2 Build unified change detection system
+  - [ ] 2.2 Build unified change detection system
     - Refactor existing container.GetChanges into generic ResourceManager pattern
     - Standardize Add/Update/Remove/None change types across all resources
     - Implement change execution with proper error handling
     - _Requirements: 10.1, 10.2, 10.3_ | _Status: Refactor existing_
 
-- [x] 3. Build Dependency Resolution Engine
-  - [x] 3.1 Implement dependency graph builder
+- [ ] 3. Build Dependency Resolution Engine
+  - [ ] 3.1 Implement dependency graph builder
     - Create DependencyResolver interface and DependencyGraph structure
     - Build dependency relationships from manifest cross-references
     - Add circular dependency detection and validation
     - _Requirements: 7.1, 7.2, 7.3_ | _Status: New implementation_
 
-  - [x] 3.2 Implement topological sorting for execution order
+  - [ ] 3.2 Implement topological sorting for execution order
     - Create creation and deletion order algorithms
     - Handle parallel execution of independent resources
     - Add dependency failure propagation logic
@@ -119,7 +121,7 @@
     - Add resource cleanup suggestions in error messages
     - Provide clear guidance on resolving naming conflicts
     - _Requirements: 8.1, 8.2, 8.3_ | _Status: Enhancement_
-  
+
 ## Phase 5: Advanced Features and Enhanced UX
 
 - [ ] 7. Implement comprehensive resource labeling strategy

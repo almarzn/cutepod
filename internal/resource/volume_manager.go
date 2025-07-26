@@ -5,6 +5,8 @@ import (
 	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 // VolumeManager implements ResourceManager for volume resources
@@ -82,6 +84,11 @@ func (vm *VolumeManager) CreateResource(ctx context.Context, resource Resource) 
 		return fmt.Errorf("unable to connect to podman: %w", err)
 	}
 
+	// Handle bind mounts differently from named volumes
+	if volume.Spec.Type == VolumeTypeBind {
+		return vm.createBindMount(volume)
+	}
+
 	// Create volume spec for named volumes
 	spec := vm.buildVolumeSpec(volume)
 
@@ -116,6 +123,11 @@ func (vm *VolumeManager) DeleteResource(ctx context.Context, resource Resource) 
 		return fmt.Errorf("expected VolumeResource, got %T", resource)
 	}
 
+	// For bind mounts, we don't need to delete anything from Podman
+	if volume.Spec.Type == VolumeTypeBind {
+		return nil
+	}
+
 	connectedClient := podman.NewConnectedClient(vm.client)
 	defer connectedClient.Close()
 
@@ -139,7 +151,16 @@ func (vm *VolumeManager) CompareResources(desired, actual Resource) (bool, error
 		return false, fmt.Errorf("expected VolumeResource for actual, got %T", actual)
 	}
 
+	// Compare key fields that would require recreation
+	if desiredVolume.Spec.Type != actualVolume.Spec.Type {
+		return false, nil
+	}
+
 	if desiredVolume.Spec.Driver != actualVolume.Spec.Driver {
+		return false, nil
+	}
+
+	if desiredVolume.Spec.HostPath != actualVolume.Spec.HostPath {
 		return false, nil
 	}
 
@@ -161,6 +182,19 @@ func (vm *VolumeManager) convertPodmanVolumeToResource(volume podman.VolumeInfo)
 	// Convert volume spec
 	resource.Spec.Driver = volume.Driver
 	resource.Spec.Options = volume.Options
+
+	// Determine volume type based on driver or options
+	if volume.Driver == "local" {
+		// Check if it's a bind mount by looking at options
+		if device, exists := volume.Options["device"]; exists && device != "" {
+			resource.Spec.Type = VolumeTypeBind
+			resource.Spec.HostPath = device
+		} else {
+			resource.Spec.Type = VolumeTypeVolume
+		}
+	} else {
+		resource.Spec.Type = VolumeTypeVolume
+	}
 
 	return resource
 }
@@ -189,6 +223,24 @@ func (vm *VolumeManager) buildVolumeSpec(volume *VolumeResource) podman.VolumeSp
 	}
 
 	return spec
+}
+
+func (vm *VolumeManager) createBindMount(volume *VolumeResource) error {
+	if volume.Spec.HostPath == "" {
+		return fmt.Errorf("hostPath is required for bind mount volumes")
+	}
+
+	// Ensure the host path exists
+	if err := os.MkdirAll(volume.Spec.HostPath, 0755); err != nil {
+		return fmt.Errorf("unable to create host path %s: %w", volume.Spec.HostPath, err)
+	}
+
+	// Validate that the path is absolute
+	if !filepath.IsAbs(volume.Spec.HostPath) {
+		return fmt.Errorf("hostPath must be an absolute path, got: %s", volume.Spec.HostPath)
+	}
+
+	return nil
 }
 
 func (vm *VolumeManager) compareOptions(desired, actual map[string]string) bool {

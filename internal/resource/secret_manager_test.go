@@ -95,35 +95,22 @@ func TestSecretManager_GetActualState(t *testing.T) {
 		t.Errorf("Expected 2 secrets, got %d", len(secrets))
 	}
 
-	var secret1Resource, secret2Resource *SecretResource
-
-	for _, s := range secrets {
-		secret := s.(*SecretResource)
-		switch secret.GetName() {
-		case "secret1":
-			secret1Resource = secret
-		case "secret2":
-			secret2Resource = secret
-		default:
-			t.Errorf("Unexpected secret name: %s", secret.GetName())
-		}
+	// Verify first secret
+	secret1Resource := secrets[0].(*SecretResource)
+	if secret1Resource.GetName() != "secret1" {
+		t.Errorf("Expected first secret name 'secret1', got '%s'", secret1Resource.GetName())
+	}
+	if secret1Resource.Spec.Type != SecretTypeOpaque {
+		t.Errorf("Expected secret type %s, got %s", SecretTypeOpaque, secret1Resource.Spec.Type)
+	}
+	if secret1Resource.GetLabels()[labels.LabelChart] != "test-name" {
+		t.Errorf("Expected name label 'test-name', got '%s'", secret1Resource.GetLabels()[labels.LabelChart])
 	}
 
-	if secret1Resource == nil {
-		t.Error("Expected secret 'secret1' not found")
-	} else {
-		if secret1Resource.Spec.Type != SecretTypeOpaque {
-			t.Errorf("Expected secret1 type %s, got %s", SecretTypeOpaque, secret1Resource.Spec.Type)
-		}
-		if secret1Resource.GetLabels()[labels.LabelChart] != "test-name" {
-			t.Errorf("Expected secret1 label 'test-name', got '%s'", secret1Resource.GetLabels()[labels.LabelChart])
-		}
-	}
-
-	if secret2Resource == nil {
-		t.Error("Expected secret 'secret2' not found")
-	} else {
-		// Add additional checks for secret2 if needed
+	// Verify second secret
+	secret2Resource := secrets[1].(*SecretResource)
+	if secret2Resource.GetName() != "secret2" {
+		t.Errorf("Expected second secret name 'secret2', got '%s'", secret2Resource.GetName())
 	}
 }
 

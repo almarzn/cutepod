@@ -1,0 +1,4 @@
+apiVersion: v1
+name: demo-chart
+version: 0.1.0
+description: "Example Cutepod chart demonstrating upgrade scenario"

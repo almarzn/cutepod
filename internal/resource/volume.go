@@ -8,12 +8,19 @@ type VolumeResource struct {
 
 // CuteVolumeSpec defines the specification for a volume
 type CuteVolumeSpec struct {
-	Driver  string            `json:"driver,omitempty"`
-	Options map[string]string `json:"options,omitempty"`
+	Type     VolumeType        `json:"type,omitempty"`
+	Driver   string            `json:"driver,omitempty"`
+	Options  map[string]string `json:"options,omitempty"`
+	HostPath string            `json:"hostPath,omitempty"` // for bind mounts
 }
 
 // VolumeType represents the type of volume
 type VolumeType string
+
+const (
+	VolumeTypeBind   VolumeType = "bind"
+	VolumeTypeVolume VolumeType = "volume"
+)
 
 // NewVolumeResource creates a new VolumeResource
 func NewVolumeResource() *VolumeResource {
