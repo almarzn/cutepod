@@ -9,23 +9,39 @@ import (
 
 // VolumeManager implements ResourceManager for volume resources
 type VolumeManager struct {
-	client      podman.PodmanClient
-	pathManager *VolumePathManager
+	client        podman.PodmanClient
+	pathManager   *VolumePathManager
+	permissionMgr *VolumePermissionManager
 }
 
 // NewVolumeManager creates a new VolumeManager
 func NewVolumeManager(client podman.PodmanClient) *VolumeManager {
+	permissionMgr, err := NewVolumePermissionManager()
+	if err != nil {
+		// Log error but continue with nil permission manager
+		// This allows the system to work even if permission detection fails
+		permissionMgr = nil
+	}
+
 	return &VolumeManager{
-		client:      client,
-		pathManager: NewVolumePathManager(""),
+		client:        client,
+		pathManager:   NewVolumePathManager(""),
+		permissionMgr: permissionMgr,
 	}
 }
 
 // NewVolumeManagerWithPathManager creates a new VolumeManager with a custom VolumePathManager
 func NewVolumeManagerWithPathManager(client podman.PodmanClient, pathManager *VolumePathManager) *VolumeManager {
+	permissionMgr, err := NewVolumePermissionManager()
+	if err != nil {
+		// Log error but continue with nil permission manager
+		permissionMgr = nil
+	}
+
 	return &VolumeManager{
-		client:      client,
-		pathManager: pathManager,
+		client:        client,
+		pathManager:   pathManager,
+		permissionMgr: permissionMgr,
 	}
 }
 
@@ -326,6 +342,21 @@ func (vm *VolumeManager) createHostPathVolume(volume *VolumeResource) error {
 		return fmt.Errorf("failed to ensure hostPath volume path: %w", err)
 	}
 
+	// Apply permission management if available
+	if vm.permissionMgr != nil {
+		// Create a dummy container for permission management (we don't have container context here)
+		dummyContainer := &ContainerResource{}
+
+		if err := vm.permissionMgr.ManageHostDirectoryOwnership(pathInfo.SourcePath, volume, dummyContainer); err != nil {
+			return fmt.Errorf("failed to manage host directory ownership: %w", err)
+		}
+
+		// Validate permissions
+		if err := vm.permissionMgr.ValidateVolumePermissions(volume, dummyMount, pathInfo.SourcePath); err != nil {
+			return fmt.Errorf("volume permission validation failed: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -346,6 +377,21 @@ func (vm *VolumeManager) createEmptyDirVolume(volume *VolumeResource) error {
 	// Ensure the path exists
 	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
 		return fmt.Errorf("failed to ensure emptyDir volume path: %w", err)
+	}
+
+	// Apply permission management if available
+	if vm.permissionMgr != nil {
+		// Create a dummy container for permission management (we don't have container context here)
+		dummyContainer := &ContainerResource{}
+
+		if err := vm.permissionMgr.ManageHostDirectoryOwnership(pathInfo.SourcePath, volume, dummyContainer); err != nil {
+			return fmt.Errorf("failed to manage host directory ownership: %w", err)
+		}
+
+		// Validate permissions
+		if err := vm.permissionMgr.ValidateVolumePermissions(volume, dummyMount, pathInfo.SourcePath); err != nil {
+			return fmt.Errorf("volume permission validation failed: %w", err)
+		}
 	}
 
 	// TODO: Handle sizeLimit and medium (Memory) - these would require additional Podman configuration
@@ -547,4 +593,9 @@ func (vm *VolumeManager) compareOwnership(desired, actual *VolumeOwnership) bool
 // GetVolumePathManager returns the VolumePathManager instance for external use
 func (vm *VolumeManager) GetVolumePathManager() *VolumePathManager {
 	return vm.pathManager
+}
+
+// GetVolumePermissionManager returns the VolumePermissionManager instance for external use
+func (vm *VolumeManager) GetVolumePermissionManager() *VolumePermissionManager {
+	return vm.permissionMgr
 }
