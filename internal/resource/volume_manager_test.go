@@ -154,8 +154,8 @@ func TestVolumeManager_CreateResource_BindMount_MissingHostPath(t *testing.T) {
 		t.Fatal("Expected error for missing hostPath, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "device option") {
-		t.Errorf("Expected error about device option, got: %v", err)
+	if !strings.Contains(err.Error(), "device option") && !strings.Contains(err.Error(), "legacy bind volume requires") {
+		t.Errorf("Expected error about device option or legacy bind volume, got: %v", err)
 	}
 }
 

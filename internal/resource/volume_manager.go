@@ -5,19 +5,27 @@ import (
 	"cutepod/internal/labels"
 	"cutepod/internal/podman"
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 // VolumeManager implements ResourceManager for volume resources
 type VolumeManager struct {
-	client podman.PodmanClient
+	client      podman.PodmanClient
+	pathManager *VolumePathManager
 }
 
 // NewVolumeManager creates a new VolumeManager
 func NewVolumeManager(client podman.PodmanClient) *VolumeManager {
 	return &VolumeManager{
-		client: client,
+		client:      client,
+		pathManager: NewVolumePathManager(""),
+	}
+}
+
+// NewVolumeManagerWithPathManager creates a new VolumeManager with a custom VolumePathManager
+func NewVolumeManagerWithPathManager(client podman.PodmanClient, pathManager *VolumePathManager) *VolumeManager {
+	return &VolumeManager{
+		client:      client,
+		pathManager: pathManager,
 	}
 }
 
@@ -265,28 +273,21 @@ func (vm *VolumeManager) buildVolumeSpec(volume *VolumeResource) podman.VolumeSp
 }
 
 func (vm *VolumeManager) createBindMount(volume *VolumeResource) error {
-	// Legacy support - check for old-style hostPath field in options or driver
-	var hostPath string
-
-	// Try to get hostPath from legacy fields
-	if device, exists := volume.Spec.Options["device"]; exists {
-		hostPath = device
-	} else {
-		return fmt.Errorf("legacy bind mount requires device option or use hostPath volume type instead")
+	// Create a dummy mount to resolve the base path (no subPath)
+	dummyMount := &VolumeMount{
+		Name:      volume.GetName(),
+		MountPath: "/dummy", // Not used for path resolution
 	}
 
-	if hostPath == "" {
-		return fmt.Errorf("hostPath is required for bind mount volumes")
+	// Resolve the base path using the path manager
+	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
+	if err != nil {
+		return fmt.Errorf("failed to resolve legacy bind mount path: %w", err)
 	}
 
-	// Ensure the host path exists
-	if err := os.MkdirAll(hostPath, 0755); err != nil {
-		return fmt.Errorf("unable to create host path %s: %w", hostPath, err)
-	}
-
-	// Validate that the path is absolute
-	if !filepath.IsAbs(hostPath) {
-		return fmt.Errorf("hostPath must be an absolute path, got: %s", hostPath)
+	// Ensure the path exists
+	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
+		return fmt.Errorf("failed to ensure legacy bind mount path: %w", err)
 	}
 
 	return nil
@@ -308,69 +309,21 @@ func (vm *VolumeManager) compareOptions(desired, actual map[string]string) bool 
 
 // createHostPathVolume creates a hostPath volume by ensuring the host directory exists
 func (vm *VolumeManager) createHostPathVolume(volume *VolumeResource) error {
-	if volume.Spec.HostPath == nil {
-		return fmt.Errorf("hostPath specification is required for hostPath volume")
+	// Create a dummy mount to resolve the base path (no subPath)
+	dummyMount := &VolumeMount{
+		Name:      volume.GetName(),
+		MountPath: "/dummy", // Not used for path resolution
 	}
 
-	hostPath := volume.Spec.HostPath.Path
-
-	// Validate the path is absolute
-	if !filepath.IsAbs(hostPath) {
-		return fmt.Errorf("hostPath must be an absolute path, got: %s", hostPath)
+	// Resolve the base path
+	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
+	if err != nil {
+		return fmt.Errorf("failed to resolve hostPath volume path: %w", err)
 	}
 
-	// Handle different hostPath types
-	pathType := HostPathDirectoryOrCreate
-	if volume.Spec.HostPath.Type != nil {
-		pathType = *volume.Spec.HostPath.Type
-	}
-
-	switch pathType {
-	case HostPathDirectoryOrCreate:
-		// Create directory if it doesn't exist
-		if err := os.MkdirAll(hostPath, 0755); err != nil {
-			return fmt.Errorf("unable to create host path %s: %w", hostPath, err)
-		}
-	case HostPathDirectory:
-		// Verify directory exists
-		if info, err := os.Stat(hostPath); err != nil {
-			return fmt.Errorf("hostPath directory %s does not exist: %w", hostPath, err)
-		} else if !info.IsDir() {
-			return fmt.Errorf("hostPath %s exists but is not a directory", hostPath)
-		}
-	case HostPathFileOrCreate:
-		// Create file if it doesn't exist
-		if _, err := os.Stat(hostPath); os.IsNotExist(err) {
-			// Create parent directory
-			if err := os.MkdirAll(filepath.Dir(hostPath), 0755); err != nil {
-				return fmt.Errorf("unable to create parent directory for %s: %w", hostPath, err)
-			}
-			// Create empty file
-			if file, err := os.Create(hostPath); err != nil {
-				return fmt.Errorf("unable to create host file %s: %w", hostPath, err)
-			} else {
-				file.Close()
-			}
-		}
-	case HostPathFile:
-		// Verify file exists
-		if info, err := os.Stat(hostPath); err != nil {
-			return fmt.Errorf("hostPath file %s does not exist: %w", hostPath, err)
-		} else if info.IsDir() {
-			return fmt.Errorf("hostPath %s exists but is a directory, expected file", hostPath)
-		}
-	case HostPathSocket, HostPathCharDevice, HostPathBlockDevice:
-		// For special file types, just verify they exist
-		if _, err := os.Stat(hostPath); err != nil {
-			return fmt.Errorf("hostPath %s does not exist: %w", hostPath, err)
-		}
-	}
-
-	// Apply security context if specified
-	if volume.Spec.SecurityContext != nil {
-		if err := vm.applyVolumeSecurityContext(hostPath, volume.Spec.SecurityContext); err != nil {
-			return fmt.Errorf("failed to apply security context to %s: %w", hostPath, err)
-		}
+	// Ensure the path exists
+	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
+		return fmt.Errorf("failed to ensure hostPath volume path: %w", err)
 	}
 
 	return nil
@@ -378,23 +331,21 @@ func (vm *VolumeManager) createHostPathVolume(volume *VolumeResource) error {
 
 // createEmptyDirVolume creates an emptyDir volume by creating a temporary directory
 func (vm *VolumeManager) createEmptyDirVolume(volume *VolumeResource) error {
-	if volume.Spec.EmptyDir == nil {
-		return fmt.Errorf("emptyDir specification is required for emptyDir volume")
+	// Create a dummy mount to resolve the base path (no subPath)
+	dummyMount := &VolumeMount{
+		Name:      volume.GetName(),
+		MountPath: "/dummy", // Not used for path resolution
 	}
 
-	// Create temporary directory
-	// In a real implementation, you might want to use a specific base directory
-	tempDir := filepath.Join("/tmp", "cutepod-emptydir", volume.GetName())
-
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
-		return fmt.Errorf("unable to create emptyDir %s: %w", tempDir, err)
+	// Resolve the base path
+	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
+	if err != nil {
+		return fmt.Errorf("failed to resolve emptyDir volume path: %w", err)
 	}
 
-	// Apply security context if specified
-	if volume.Spec.SecurityContext != nil {
-		if err := vm.applyVolumeSecurityContext(tempDir, volume.Spec.SecurityContext); err != nil {
-			return fmt.Errorf("failed to apply security context to emptyDir %s: %w", tempDir, err)
-		}
+	// Ensure the path exists
+	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
+		return fmt.Errorf("failed to ensure emptyDir volume path: %w", err)
 	}
 
 	// TODO: Handle sizeLimit and medium (Memory) - these would require additional Podman configuration
@@ -422,47 +373,7 @@ func (vm *VolumeManager) createNamedVolume(ctx context.Context, podmanClient pod
 
 // deleteEmptyDirVolume cleans up an emptyDir volume
 func (vm *VolumeManager) deleteEmptyDirVolume(volume *VolumeResource) error {
-	tempDir := filepath.Join("/tmp", "cutepod-emptydir", volume.GetName())
-
-	if err := os.RemoveAll(tempDir); err != nil {
-		return fmt.Errorf("unable to remove emptyDir %s: %w", tempDir, err)
-	}
-
-	return nil
-}
-
-// applyVolumeSecurityContext applies security context settings to a volume path
-func (vm *VolumeManager) applyVolumeSecurityContext(path string, securityContext *VolumeSecurityContext) error {
-	if securityContext.Owner != nil {
-		uid := -1
-		gid := -1
-
-		if securityContext.Owner.User != nil {
-			uid = int(*securityContext.Owner.User)
-		}
-		if securityContext.Owner.Group != nil {
-			gid = int(*securityContext.Owner.Group)
-		}
-
-		if err := os.Chown(path, uid, gid); err != nil {
-			return fmt.Errorf("failed to set ownership on %s: %w", path, err)
-		}
-	}
-
-	// SELinux handling would be implemented here in a production system
-	// For now, we just validate the configuration
-	if securityContext.SELinuxOptions != nil {
-		if securityContext.SELinuxOptions.Level != "" {
-			switch securityContext.SELinuxOptions.Level {
-			case "shared", "private":
-				// Valid - would be applied during mount
-			default:
-				return fmt.Errorf("invalid SELinux level: %s", securityContext.SELinuxOptions.Level)
-			}
-		}
-	}
-
-	return nil
+	return vm.pathManager.CleanupEmptyDirVolume(volume.GetName())
 }
 
 // buildNamedVolumeSpec builds a Podman volume spec for named volumes
@@ -631,4 +542,9 @@ func (vm *VolumeManager) compareOwnership(desired, actual *VolumeOwnership) bool
 	}
 
 	return desiredGroup == actualGroup
+}
+
+// GetVolumePathManager returns the VolumePathManager instance for external use
+func (vm *VolumeManager) GetVolumePathManager() *VolumePathManager {
+	return vm.pathManager
 }
