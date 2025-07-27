@@ -6,7 +6,7 @@
   - Add validation for new volume type specifications
   - _Requirements: 1.1, 1.2, 1.3, 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 2. Implement enhanced VolumeMount structure with subPath support
+- [x] 2. Implement enhanced VolumeMount structure with subPath support
   - Add SubPath field to VolumeMount struct in container.go
   - Add VolumeMountOptions with SELinux and UID/GID mapping support
   - Update container validation to handle new mount options

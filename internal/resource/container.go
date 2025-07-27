@@ -221,5 +221,67 @@ func (c *ContainerResource) Validate(yml string) []error {
 		}
 	}
 
+	// Validate volume mounts
+	for i, volume := range c.Spec.Volumes {
+		if strings.TrimSpace(volume.Name) == "" {
+			addErr(fmt.Sprintf("$.spec.volumes[%d].name", i), "volume name must not be empty")
+		}
+
+		// Validate mount path
+		mountPath := volume.MountPath
+		if mountPath == "" && volume.ContainerPath != "" {
+			// Support deprecated ContainerPath for backward compatibility
+			mountPath = volume.ContainerPath
+		}
+		if strings.TrimSpace(mountPath) == "" {
+			addErr(fmt.Sprintf("$.spec.volumes[%d].mountPath", i), "mountPath must not be empty")
+		} else if !strings.HasPrefix(mountPath, "/") {
+			addErr(fmt.Sprintf("$.spec.volumes[%d].mountPath", i), "mountPath must be an absolute path starting with '/'")
+		}
+
+		// Validate subPath for security (prevent path traversal)
+		if volume.SubPath != "" {
+			if strings.Contains(volume.SubPath, "..") {
+				addErr(fmt.Sprintf("$.spec.volumes[%d].subPath", i), "subPath must not contain '..' (path traversal not allowed)")
+			}
+			if strings.HasPrefix(volume.SubPath, "/") {
+				addErr(fmt.Sprintf("$.spec.volumes[%d].subPath", i), "subPath must be a relative path (cannot start with '/')")
+			}
+			if strings.Contains(volume.SubPath, "//") {
+				addErr(fmt.Sprintf("$.spec.volumes[%d].subPath", i), "subPath must not contain consecutive slashes")
+			}
+		}
+
+		// Validate mount options if specified
+		if volume.MountOptions != nil {
+			// Validate SELinux label
+			if volume.MountOptions.SELinuxLabel != "" {
+				validSELinuxLabels := map[string]bool{
+					"z": true, "Z": true, "shared": true, "private": true,
+				}
+				if !validSELinuxLabels[volume.MountOptions.SELinuxLabel] {
+					addErr(fmt.Sprintf("$.spec.volumes[%d].mountOptions.seLinuxLabel", i),
+						"seLinuxLabel must be one of: z, Z, shared, private")
+				}
+			}
+
+			// Validate UID mapping
+			if volume.MountOptions.UIDMapping != nil {
+				if volume.MountOptions.UIDMapping.Size <= 0 {
+					addErr(fmt.Sprintf("$.spec.volumes[%d].mountOptions.uidMapping.size", i),
+						"uidMapping.size must be greater than 0")
+				}
+			}
+
+			// Validate GID mapping
+			if volume.MountOptions.GIDMapping != nil {
+				if volume.MountOptions.GIDMapping.Size <= 0 {
+					addErr(fmt.Sprintf("$.spec.volumes[%d].mountOptions.gidMapping.size", i),
+						"gidMapping.size must be greater than 0")
+				}
+			}
+		}
+	}
+
 	return errs
 }
