@@ -64,7 +64,9 @@ func TestVolumeManager_CreateResource_NamedVolume(t *testing.T) {
 	volume := NewVolumeResource()
 	volume.ObjectMeta.Name = "test-volume"
 	volume.Spec.Type = VolumeTypeVolume
-	volume.Spec.Driver = "local"
+	volume.Spec.Volume = &VolumeVolumeSource{
+		Driver: "local",
+	}
 
 	ctx := context.Background()
 	err := vm.CreateResource(ctx, volume)
@@ -97,7 +99,7 @@ func TestVolumeManager_CreateResource_BindMount(t *testing.T) {
 	volume := NewVolumeResource()
 	volume.ObjectMeta.Name = "test-bind"
 	volume.Spec.Type = VolumeTypeBind
-	volume.Spec.HostPath = tempDir
+	volume.Spec.Options = map[string]string{"device": tempDir}
 
 	ctx := context.Background()
 	err := vm.CreateResource(ctx, volume)
@@ -124,7 +126,7 @@ func TestVolumeManager_CreateResource_BindMount_InvalidPath(t *testing.T) {
 	volume := NewVolumeResource()
 	volume.ObjectMeta.Name = "test-bind"
 	volume.Spec.Type = VolumeTypeBind
-	volume.Spec.HostPath = "relative/path" // Invalid relative path
+	volume.Spec.Options = map[string]string{"device": "relative/path"} // Invalid relative path
 
 	ctx := context.Background()
 	err := vm.CreateResource(ctx, volume)
@@ -152,8 +154,8 @@ func TestVolumeManager_CreateResource_BindMount_MissingHostPath(t *testing.T) {
 		t.Fatal("Expected error for missing hostPath, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "hostPath is required") {
-		t.Errorf("Expected error about required hostPath, got: %v", err)
+	if !strings.Contains(err.Error(), "device option") {
+		t.Errorf("Expected error about device option, got: %v", err)
 	}
 }
 

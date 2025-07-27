@@ -217,8 +217,10 @@ func (p *ManifestParser) validateVolume(volume *VolumeResource) error {
 		volume.Spec.Type = VolumeTypeVolume // Default type
 	}
 
-	if volume.Spec.Type == VolumeTypeBind && volume.Spec.HostPath == "" {
-		return fmt.Errorf("bind volume requires hostPath")
+	// Use the new validation method
+	if errs := volume.Validate(); len(errs) > 0 {
+		// Return the first validation error
+		return errs[0]
 	}
 
 	return nil

@@ -47,10 +47,26 @@ type ContainerPort struct {
 }
 
 type VolumeMount struct {
-	Name          string `json:"name"`                    // Volume name reference (required)
-	ContainerPath string `json:"containerPath,omitempty"` // Deprecated: use MountPath
-	MountPath     string `json:"mountPath"`               // Container mount path
-	ReadOnly      bool   `json:"readOnly,omitempty"`
+	Name          string              `json:"name"`                    // Volume name reference (required)
+	ContainerPath string              `json:"containerPath,omitempty"` // Deprecated: use MountPath
+	MountPath     string              `json:"mountPath"`               // Container mount path
+	SubPath       string              `json:"subPath,omitempty"`       // Path within the volume from which to mount
+	ReadOnly      bool                `json:"readOnly,omitempty"`
+	MountOptions  *VolumeMountOptions `json:"mountOptions,omitempty"` // Podman-specific mount options
+}
+
+// VolumeMountOptions defines Podman-specific mount options
+type VolumeMountOptions struct {
+	SELinuxLabel string         `json:"seLinuxLabel,omitempty"` // "z", "Z", or custom SELinux label
+	UIDMapping   *UIDGIDMapping `json:"uidMapping,omitempty"`   // UID mapping for rootless Podman
+	GIDMapping   *UIDGIDMapping `json:"gidMapping,omitempty"`   // GID mapping for rootless Podman
+}
+
+// UIDGIDMapping defines user/group ID mapping for rootless containers
+type UIDGIDMapping struct {
+	ContainerID int64 `json:"containerID"` // ID inside the container
+	HostID      int64 `json:"hostID"`      // ID on the host
+	Size        int64 `json:"size"`        // Range size for the mapping
 }
 
 type SecretReference struct {
