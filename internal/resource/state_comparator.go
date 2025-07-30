@@ -263,16 +263,20 @@ func (sc *DefaultStateComparator) compareVolumeResources(desired, actual Resourc
 		reasons = append(reasons, "volume type changed")
 	}
 
-	if desiredVolume.Spec.Driver != actualVolume.Spec.Driver {
-		reasons = append(reasons, "driver changed")
-	}
-
 	if desiredVolume.Spec.HostPath != actualVolume.Spec.HostPath {
 		reasons = append(reasons, "host path changed")
 	}
 
-	if !sc.compareMaps(desiredVolume.Spec.Options, actualVolume.Spec.Options) {
-		reasons = append(reasons, "options changed")
+	if desiredVolume.Spec.EmptyDir != actualVolume.Spec.EmptyDir {
+		reasons = append(reasons, "empty dir changed")
+	}
+
+	if desiredVolume.Spec.Volume != actualVolume.Spec.Volume {
+		reasons = append(reasons, "volume spec changed")
+	}
+
+	if desiredVolume.Spec.SecurityContext != actualVolume.Spec.SecurityContext {
+		reasons = append(reasons, "security context changed")
 	}
 
 	return reasons

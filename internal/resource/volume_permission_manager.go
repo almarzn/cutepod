@@ -254,7 +254,7 @@ func (vpm *VolumePermissionManager) mapToHost(containerUID, containerGID int64) 
 }
 
 // ManageHostDirectoryOwnership manages ownership of host directories for volume mounts
-func (vpm *VolumePermissionManager) ManageHostDirectoryOwnership(hostPath string, volume *VolumeResource, container *ContainerResource) error {
+func (vpm *VolumePermissionManager) ManageHostDirectoryOwnership(hostPath string, volume *VolumeResource) error {
 	// Only handle ownership if security context specifies it
 	if volume.Spec.SecurityContext == nil || volume.Spec.SecurityContext.Owner == nil {
 		return nil
@@ -307,7 +307,7 @@ func (vpm *VolumePermissionManager) BuildPodmanMountOptions(volume *VolumeResour
 
 	// Base mount type
 	switch volume.Spec.Type {
-	case VolumeTypeHostPath, VolumeTypeBind:
+	case VolumeTypeHostPath:
 		options = append(options, "bind")
 	}
 

@@ -9,9 +9,10 @@ import (
 
 // VolumeManager implements ResourceManager for volume resources
 type VolumeManager struct {
-	client        podman.PodmanClient
-	pathManager   *VolumePathManager
-	permissionMgr *VolumePermissionManager
+	client          podman.PodmanClient
+	pathManager     *VolumePathManager
+	permissionMgr   *VolumePermissionManager
+	creatorRegistry *VolumeCreatorRegistry
 }
 
 // NewVolumeManager creates a new VolumeManager
@@ -23,10 +24,14 @@ func NewVolumeManager(client podman.PodmanClient) *VolumeManager {
 		permissionMgr = nil
 	}
 
+	pathManager := NewVolumePathManager("")
+	creatorRegistry := NewVolumeCreatorRegistry(pathManager, permissionMgr)
+
 	return &VolumeManager{
-		client:        client,
-		pathManager:   NewVolumePathManager(""),
-		permissionMgr: permissionMgr,
+		client:          client,
+		pathManager:     pathManager,
+		permissionMgr:   permissionMgr,
+		creatorRegistry: creatorRegistry,
 	}
 }
 
@@ -38,10 +43,13 @@ func NewVolumeManagerWithPathManager(client podman.PodmanClient, pathManager *Vo
 		permissionMgr = nil
 	}
 
+	creatorRegistry := NewVolumeCreatorRegistry(pathManager, permissionMgr)
+
 	return &VolumeManager{
-		client:        client,
-		pathManager:   pathManager,
-		permissionMgr: permissionMgr,
+		client:          client,
+		pathManager:     pathManager,
+		permissionMgr:   permissionMgr,
+		creatorRegistry: creatorRegistry,
 	}
 }
 
@@ -100,30 +108,15 @@ func (vm *VolumeManager) CreateResource(ctx context.Context, resource Resource) 
 		return fmt.Errorf("expected VolumeResource, got %T", resource)
 	}
 
-	connectedClient := podman.NewConnectedClient(vm.client)
-	defer connectedClient.Close()
-
-	podmanClient, err := connectedClient.GetClient(ctx)
+	// Get the appropriate creator for this volume type
+	creator, err := vm.creatorRegistry.GetCreator(volume.Spec.Type)
 	if err != nil {
-		return fmt.Errorf("unable to connect to podman: %w", err)
+		return fmt.Errorf("failed to get volume creator: %w", err)
 	}
 
-	// Handle different volume types
-	switch volume.Spec.Type {
-	case VolumeTypeHostPath:
-		return vm.createHostPathVolume(volume)
-	case VolumeTypeEmptyDir:
-		return vm.createEmptyDirVolume(volume)
-	case VolumeTypeVolume:
-		return vm.createNamedVolume(ctx, podmanClient, volume)
-	case VolumeTypeBind:
-		// Legacy support - treat as hostPath
-		return vm.createBindMount(volume)
-	default:
-		return fmt.Errorf("unsupported volume type: %s", volume.Spec.Type)
-	}
-
-	return fmt.Errorf("unexpected code path - volume type should be handled above")
+	// Use the creator to create the volume, passing the Podman client
+	_, err = creator.CreateVolume(ctx, vm.client, volume)
+	return err
 }
 
 // UpdateResource updates an existing volume resource
@@ -148,30 +141,14 @@ func (vm *VolumeManager) DeleteResource(ctx context.Context, resource Resource) 
 		return fmt.Errorf("expected VolumeResource, got %T", resource)
 	}
 
-	// Handle different volume types for deletion
-	switch volume.Spec.Type {
-	case VolumeTypeHostPath, VolumeTypeBind:
-		// For hostPath and bind mounts, we don't need to delete anything from Podman
-		return nil
-	case VolumeTypeEmptyDir:
-		// For emptyDir, we should clean up the temporary directory
-		return vm.deleteEmptyDirVolume(volume)
-	case VolumeTypeVolume:
-		// For named volumes, delete from Podman
-		break
-	default:
-		return fmt.Errorf("unsupported volume type for deletion: %s", volume.Spec.Type)
-	}
-
-	connectedClient := podman.NewConnectedClient(vm.client)
-	defer connectedClient.Close()
-
-	podmanClient, err := connectedClient.GetClient(ctx)
+	// Get the appropriate creator for this volume type
+	creator, err := vm.creatorRegistry.GetCreator(volume.Spec.Type)
 	if err != nil {
-		return fmt.Errorf("unable to connect to podman: %w", err)
+		return fmt.Errorf("failed to get volume creator: %w", err)
 	}
 
-	return podmanClient.RemoveVolume(ctx, volume.GetName())
+	// Use the creator to delete the volume, passing the Podman client
+	return creator.DeleteVolume(ctx, vm.client, volume)
 }
 
 // CompareResources compares desired vs actual volume resource
@@ -205,17 +182,9 @@ func (vm *VolumeManager) CompareResources(desired, actual Resource) (bool, error
 		if !vm.compareVolumeSpecs(desiredVolume.Spec.Volume, actualVolume.Spec.Volume) {
 			return false, nil
 		}
-	case VolumeTypeBind:
-		// Legacy comparison - compare driver and options
-		if desiredVolume.Spec.Driver != actualVolume.Spec.Driver {
-			return false, nil
-		}
-		if !vm.compareOptions(desiredVolume.Spec.Options, actualVolume.Spec.Options) {
-			return false, nil
-		}
 	}
 
-	// Compare security context
+	// Compare security context - this is important for the enhanced volume support
 	if !vm.compareSecurityContexts(desiredVolume.Spec.SecurityContext, actualVolume.Spec.SecurityContext) {
 		return false, nil
 	}
@@ -234,7 +203,7 @@ func (vm *VolumeManager) convertPodmanVolumeToResource(volume podman.VolumeInfo)
 	if volume.Driver == "local" {
 		// Check if it's a bind mount by looking at options
 		if device, exists := volume.Options["device"]; exists && device != "" {
-			// This is likely a hostPath volume (or legacy bind)
+			// This is likely a hostPath volume
 			resource.Spec.Type = VolumeTypeHostPath
 			resource.Spec.HostPath = &HostPathVolumeSource{
 				Path: device,
@@ -262,53 +231,6 @@ func (vm *VolumeManager) convertPodmanVolumeToResource(volume podman.VolumeInfo)
 	return resource
 }
 
-func (vm *VolumeManager) buildVolumeSpec(volume *VolumeResource) podman.VolumeSpec {
-	spec := podman.VolumeSpec{
-		Name:    volume.GetName(),
-		Driver:  volume.Spec.Driver,
-		Options: volume.Spec.Options,
-		Labels:  volume.GetLabels(),
-	}
-
-	// Set default driver if not specified
-	if spec.Driver == "" {
-		spec.Driver = "local"
-	}
-
-	// Initialize options map if nil
-	if spec.Options == nil {
-		spec.Options = make(map[string]string)
-	}
-
-	// Initialize labels map if nil
-	if spec.Labels == nil {
-		spec.Labels = make(map[string]string)
-	}
-
-	return spec
-}
-
-func (vm *VolumeManager) createBindMount(volume *VolumeResource) error {
-	// Create a dummy mount to resolve the base path (no subPath)
-	dummyMount := &VolumeMount{
-		Name:      volume.GetName(),
-		MountPath: "/dummy", // Not used for path resolution
-	}
-
-	// Resolve the base path using the path manager
-	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
-	if err != nil {
-		return fmt.Errorf("failed to resolve legacy bind mount path: %w", err)
-	}
-
-	// Ensure the path exists
-	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
-		return fmt.Errorf("failed to ensure legacy bind mount path: %w", err)
-	}
-
-	return nil
-}
-
 func (vm *VolumeManager) compareOptions(desired, actual map[string]string) bool {
 	if len(desired) != len(actual) {
 		return false
@@ -321,135 +243,6 @@ func (vm *VolumeManager) compareOptions(desired, actual map[string]string) bool 
 	}
 
 	return true
-}
-
-// createHostPathVolume creates a hostPath volume by ensuring the host directory exists
-func (vm *VolumeManager) createHostPathVolume(volume *VolumeResource) error {
-	// Create a dummy mount to resolve the base path (no subPath)
-	dummyMount := &VolumeMount{
-		Name:      volume.GetName(),
-		MountPath: "/dummy", // Not used for path resolution
-	}
-
-	// Resolve the base path
-	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
-	if err != nil {
-		return fmt.Errorf("failed to resolve hostPath volume path: %w", err)
-	}
-
-	// Ensure the path exists
-	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
-		return fmt.Errorf("failed to ensure hostPath volume path: %w", err)
-	}
-
-	// Apply permission management if available
-	if vm.permissionMgr != nil {
-		// Create a dummy container for permission management (we don't have container context here)
-		dummyContainer := &ContainerResource{}
-
-		if err := vm.permissionMgr.ManageHostDirectoryOwnership(pathInfo.SourcePath, volume, dummyContainer); err != nil {
-			return fmt.Errorf("failed to manage host directory ownership: %w", err)
-		}
-
-		// Validate permissions
-		if err := vm.permissionMgr.ValidateVolumePermissions(volume, dummyMount, pathInfo.SourcePath); err != nil {
-			return fmt.Errorf("volume permission validation failed: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// createEmptyDirVolume creates an emptyDir volume by creating a temporary directory
-func (vm *VolumeManager) createEmptyDirVolume(volume *VolumeResource) error {
-	// Create a dummy mount to resolve the base path (no subPath)
-	dummyMount := &VolumeMount{
-		Name:      volume.GetName(),
-		MountPath: "/dummy", // Not used for path resolution
-	}
-
-	// Resolve the base path
-	pathInfo, err := vm.pathManager.ResolveVolumePath(volume, dummyMount)
-	if err != nil {
-		return fmt.Errorf("failed to resolve emptyDir volume path: %w", err)
-	}
-
-	// Ensure the path exists
-	if err := vm.pathManager.EnsureVolumePath(pathInfo, volume); err != nil {
-		return fmt.Errorf("failed to ensure emptyDir volume path: %w", err)
-	}
-
-	// Apply permission management if available
-	if vm.permissionMgr != nil {
-		// Create a dummy container for permission management (we don't have container context here)
-		dummyContainer := &ContainerResource{}
-
-		if err := vm.permissionMgr.ManageHostDirectoryOwnership(pathInfo.SourcePath, volume, dummyContainer); err != nil {
-			return fmt.Errorf("failed to manage host directory ownership: %w", err)
-		}
-
-		// Validate permissions
-		if err := vm.permissionMgr.ValidateVolumePermissions(volume, dummyMount, pathInfo.SourcePath); err != nil {
-			return fmt.Errorf("volume permission validation failed: %w", err)
-		}
-	}
-
-	// TODO: Handle sizeLimit and medium (Memory) - these would require additional Podman configuration
-
-	return nil
-}
-
-// createNamedVolume creates a named Podman volume
-func (vm *VolumeManager) createNamedVolume(ctx context.Context, podmanClient podman.PodmanClient, volume *VolumeResource) error {
-	if volume.Spec.Volume == nil {
-		return fmt.Errorf("volume specification is required for volume type")
-	}
-
-	// Build volume spec for named volumes
-	spec := vm.buildNamedVolumeSpec(volume)
-
-	// Create volume
-	_, err := podmanClient.CreateVolume(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("unable to create volume: %w", err)
-	}
-
-	return nil
-}
-
-// deleteEmptyDirVolume cleans up an emptyDir volume
-func (vm *VolumeManager) deleteEmptyDirVolume(volume *VolumeResource) error {
-	return vm.pathManager.CleanupEmptyDirVolume(volume.GetName())
-}
-
-// buildNamedVolumeSpec builds a Podman volume spec for named volumes
-func (vm *VolumeManager) buildNamedVolumeSpec(volume *VolumeResource) podman.VolumeSpec {
-	spec := podman.VolumeSpec{
-		Name:   volume.GetName(),
-		Labels: volume.GetLabels(),
-	}
-
-	if volume.Spec.Volume != nil {
-		spec.Driver = volume.Spec.Volume.Driver
-		spec.Options = volume.Spec.Volume.Options
-	}
-
-	// Set default driver if not specified
-	if spec.Driver == "" {
-		spec.Driver = "local"
-	}
-
-	// Initialize options map if nil
-	if spec.Options == nil {
-		spec.Options = make(map[string]string)
-	}
-
-	// Initialize labels map if nil
-	if spec.Labels == nil {
-		spec.Labels = make(map[string]string)
-	}
-
-	return spec
 }
 
 // Comparison helper methods for different volume types
@@ -488,11 +281,12 @@ func (vm *VolumeManager) compareEmptyDirSpecs(desired, actual *EmptyDirVolumeSou
 		return false
 	}
 
+	// Compare storage medium (default vs Memory)
 	if desired.Medium != actual.Medium {
 		return false
 	}
 
-	// Compare size limits
+	// Compare size limits - handle nil pointers properly
 	desiredSize := ""
 	if desired.SizeLimit != nil {
 		desiredSize = *desired.SizeLimit
@@ -503,7 +297,11 @@ func (vm *VolumeManager) compareEmptyDirSpecs(desired, actual *EmptyDirVolumeSou
 		actualSize = *actual.SizeLimit
 	}
 
-	return desiredSize == actualSize
+	if desiredSize != actualSize {
+		return false
+	}
+
+	return true
 }
 
 func (vm *VolumeManager) compareVolumeSpecs(desired, actual *VolumeVolumeSource) bool {

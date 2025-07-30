@@ -19,23 +19,16 @@ type CuteVolumeSpec struct {
 	EmptyDir        *EmptyDirVolumeSource  `json:"emptyDir,omitempty"`
 	Volume          *VolumeVolumeSource    `json:"volume,omitempty"`
 	SecurityContext *VolumeSecurityContext `json:"securityContext,omitempty"`
-
-	// Legacy fields for backward compatibility (deprecated)
-	Driver  string            `json:"driver,omitempty"`
-	Options map[string]string `json:"options,omitempty"`
 }
 
 // VolumeType represents the type of volume
 type VolumeType string
 
 const (
-	// New Kubernetes-style volume types
+	// Kubernetes-style volume types
 	VolumeTypeHostPath VolumeType = "hostPath"
 	VolumeTypeEmptyDir VolumeType = "emptyDir"
 	VolumeTypeVolume   VolumeType = "volume"
-
-	// Legacy types for backward compatibility (deprecated)
-	VolumeTypeBind VolumeType = "bind"
 )
 
 // HostPathVolumeSource represents a host path mapped into a pod
@@ -128,9 +121,6 @@ func (v *VolumeResource) Validate() []error {
 		errs = append(errs, v.validateEmptyDir()...)
 	case VolumeTypeVolume:
 		errs = append(errs, v.validateVolume()...)
-	case VolumeTypeBind:
-		// Legacy support - treat as hostPath
-		errs = append(errs, v.validateLegacyBind()...)
 	default:
 		errs = append(errs, fmt.Errorf("unsupported volume type: %s (supported types: hostPath, emptyDir, volume)", v.Spec.Type))
 	}
@@ -224,18 +214,6 @@ func (v *VolumeResource) validateVolume() []error {
 
 	// Driver is optional, defaults to "local"
 	// Options are optional
-
-	return errs
-}
-
-// validateLegacyBind validates legacy bind mount specifications
-func (v *VolumeResource) validateLegacyBind() []error {
-	var errs []error
-
-	// For legacy bind mounts, we expect the old hostPath field
-	if v.Spec.Driver == "" && v.Spec.Options == nil {
-		errs = append(errs, fmt.Errorf("legacy bind volume type is deprecated, use hostPath volume type instead"))
-	}
 
 	return errs
 }

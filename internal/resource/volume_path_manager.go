@@ -81,9 +81,6 @@ func (vpm *VolumePathManager) ResolveVolumePath(volume *VolumeResource, mount *V
 			RequiresCreation: false,
 			PathType:         HostPathDirectory,
 		}, nil
-	case VolumeTypeBind:
-		// Legacy support - treat as hostPath
-		return vpm.resolveLegacyBindVolume(volume, mount)
 	default:
 		return nil, fmt.Errorf("unsupported volume type: %s", volume.Spec.Type)
 	}
@@ -230,54 +227,6 @@ func (vpm *VolumePathManager) resolveEmptyDirVolume(volume *VolumeResource, moun
 		IsFile:           false, // EmptyDir volumes are always directories
 		RequiresCreation: true,  // EmptyDir volumes always need creation
 		PathType:         HostPathDirectoryOrCreate,
-	}
-
-	return pathInfo, nil
-}
-
-// resolveLegacyBindVolume handles legacy bind mount volumes
-func (vpm *VolumePathManager) resolveLegacyBindVolume(volume *VolumeResource, mount *VolumeMount) (*VolumePathInfo, error) {
-	// For legacy bind mounts, try to get path from options
-	var basePath string
-	if device, exists := volume.Spec.Options["device"]; exists {
-		basePath = device
-	} else {
-		return nil, fmt.Errorf("legacy bind volume requires 'device' option or use hostPath volume type instead")
-	}
-
-	// Validate host path security
-	if err := vpm.hostPathValidator.validateHostPath(basePath); err != nil {
-		return nil, fmt.Errorf("legacy bind path validation failed: %w", err)
-	}
-
-	// Resolve final path with subPath
-	finalPath := basePath
-	if mount.SubPath != "" {
-		finalPath = filepath.Join(basePath, mount.SubPath)
-	}
-
-	// Clean the path
-	finalPath = filepath.Clean(finalPath)
-
-	// Security check
-	if !strings.HasPrefix(finalPath, basePath) {
-		return nil, fmt.Errorf("resolved path %s is outside base path %s", finalPath, basePath)
-	}
-
-	pathInfo := &VolumePathInfo{
-		SourcePath:       finalPath,
-		RequiresCreation: true,
-		PathType:         HostPathDirectoryOrCreate,
-	}
-
-	// Check if path exists
-	if stat, err := os.Stat(finalPath); err == nil {
-		pathInfo.IsFile = !stat.IsDir()
-		pathInfo.RequiresCreation = false
-	} else if os.IsNotExist(err) {
-		pathInfo.IsFile = false // Default to directory for legacy volumes
-	} else {
-		return nil, fmt.Errorf("failed to stat legacy bind path %s: %w", finalPath, err)
 	}
 
 	return pathInfo, nil

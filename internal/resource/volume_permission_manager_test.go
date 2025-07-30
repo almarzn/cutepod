@@ -262,7 +262,7 @@ func TestManageHostDirectoryOwnership(t *testing.T) {
 				userNSMapping: tt.userNSMapping,
 			}
 
-			err := vpm.ManageHostDirectoryOwnership(testPath, tt.volume, tt.container)
+			err := vpm.ManageHostDirectoryOwnership(testPath, tt.volume)
 
 			if tt.expectError {
 				if err == nil {
