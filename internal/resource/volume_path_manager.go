@@ -300,7 +300,8 @@ func (vpm *VolumePathManager) ensureDirectoryPath(path string, volume *VolumeRes
 	// Apply security context if specified
 	if volume.Spec.SecurityContext != nil {
 		if err := vpm.applySecurityContext(path, volume.Spec.SecurityContext); err != nil {
-			return fmt.Errorf("failed to apply security context to directory %s: %w", path, err)
+			// In rootless mode, ownership changes may fail - log warning but continue
+			fmt.Printf("Warning: failed to apply security context to directory %s: %v (continuing anyway)\n", path, err)
 		}
 	}
 
@@ -327,7 +328,8 @@ func (vpm *VolumePathManager) ensureFilePath(path string, volume *VolumeResource
 	// Apply security context if specified
 	if volume.Spec.SecurityContext != nil {
 		if err := vpm.applySecurityContext(path, volume.Spec.SecurityContext); err != nil {
-			return fmt.Errorf("failed to apply security context to file %s: %w", path, err)
+			// In rootless mode, ownership changes may fail - log warning but continue
+			fmt.Printf("Warning: failed to apply security context to file %s: %v (continuing anyway)\n", path, err)
 		}
 	}
 

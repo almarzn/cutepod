@@ -35,8 +35,8 @@ api:
 # Network configuration
 network:
   name: demo-network
-  subnet: "172.20.0.0/16"
-  gateway: "172.20.0.1"
+  subnet: "172.25.0.0/16"
+  gateway: "172.25.0.1"
 
 # Volume configuration
 volumes:
@@ -49,6 +49,12 @@ volumes:
   logs:
     name: app-logs
     hostPath: "/tmp/app-logs"
+  cache:
+    name: redis-cache-volume
+    sizeLimit: "256Mi"
+  config:
+    name: app-config
+    hostPath: "/tmp/app-config"
 
 # Secret configuration
 secrets:

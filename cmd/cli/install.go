@@ -15,16 +15,16 @@ var installVerbose bool
 var installCmd = &cobra.Command{
 	Use:   "install <chart>",
 	Short: "Install containers (use --dry-run to preview)",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		path := args[0]
+		chartPath := args[0]
 
-		fmt.Printf("install called with path=%s dry-run=%v\n", path, installDryRun)
+		fmt.Printf("install called with chart=%s dry-run=%v\n", chartPath, installDryRun)
 
 		err := chart.Install(chart.InstallOptions{
-			ChartPath: path,
-			DryRun:    false,
-			Verbose:   false,
+			ChartPath: chartPath,
+			DryRun:    installDryRun,
+			Verbose:   installVerbose,
 		})
 
 		if err != nil {

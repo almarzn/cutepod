@@ -33,8 +33,8 @@ func Upgrade(opts UpgradeOptions) error {
 
 	fmt.Printf("Upgrading chart: %s\n", registry.Chart.Name)
 
-	// Create reconciliation controller with Podman client
-	controller := resource.NewReconciliationControllerWithURI(resource.GetPodmanURI())
+	// Create reconciliation controller with Podman client and registry
+	controller := resource.NewReconciliationControllerWithURIAndRegistry(resource.GetPodmanURI(), registry.Registry)
 
 	// Get all resources from the registry
 	manifests := registry.GetAllResources()

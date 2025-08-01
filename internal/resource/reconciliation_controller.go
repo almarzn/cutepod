@@ -73,6 +73,11 @@ type DefaultReconciliationController struct {
 
 // NewReconciliationController creates a new reconciliation controller
 func NewReconciliationController(podmanClient podman.PodmanClient) ReconciliationController {
+	return NewReconciliationControllerWithRegistry(podmanClient, nil)
+}
+
+// NewReconciliationControllerWithRegistry creates a new reconciliation controller with a registry
+func NewReconciliationControllerWithRegistry(podmanClient podman.PodmanClient, registry *ManifestRegistry) ReconciliationController {
 	controller := &DefaultReconciliationController{
 		managers:           make(map[ResourceType]ResourceManager),
 		stateComparator:    NewStateComparator(),
@@ -82,7 +87,11 @@ func NewReconciliationController(podmanClient podman.PodmanClient) Reconciliatio
 	}
 
 	// Register resource managers
-	controller.managers[ResourceTypeContainer] = NewContainerManager(podmanClient)
+	if registry != nil {
+		controller.managers[ResourceTypeContainer] = NewContainerManagerWithRegistry(podmanClient, registry)
+	} else {
+		controller.managers[ResourceTypeContainer] = NewContainerManager(podmanClient)
+	}
 	controller.managers[ResourceTypeNetwork] = NewNetworkManager(podmanClient)
 	controller.managers[ResourceTypeVolume] = NewVolumeManager(podmanClient)
 	controller.managers[ResourceTypeSecret] = NewSecretManager(podmanClient)
@@ -100,6 +109,12 @@ func NewReconciliationController(podmanClient podman.PodmanClient) Reconciliatio
 func NewReconciliationControllerWithURI(podmanURI string) ReconciliationController {
 	adapter := podman.NewPodmanAdapter()
 	return NewReconciliationController(adapter)
+}
+
+// NewReconciliationControllerWithURIAndRegistry creates a new reconciliation controller with a Podman URI and registry
+func NewReconciliationControllerWithURIAndRegistry(podmanURI string, registry *ManifestRegistry) ReconciliationController {
+	adapter := podman.NewPodmanAdapter()
+	return NewReconciliationControllerWithRegistry(adapter, registry)
 }
 
 // Reconcile performs the complete reconciliation workflow: parse → resolve → compare → execute

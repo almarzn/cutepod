@@ -18,13 +18,42 @@ import (
 
 // ContainerManager implements ResourceManager for container resources
 type ContainerManager struct {
-	client podman.PodmanClient
+	client        podman.PodmanClient
+	pathManager   *VolumePathManager
+	permissionMgr *VolumePermissionManager
+	registry      *ManifestRegistry
 }
 
 // NewContainerManager creates a new ContainerManager
 func NewContainerManager(client podman.PodmanClient) *ContainerManager {
+	pathManager := NewVolumePathManager("")
+	permissionMgr, err := NewVolumePermissionManager()
+	if err != nil {
+		// Log error but continue with nil permission manager
+		fmt.Printf("Warning: failed to initialize volume permission manager: %v\n", err)
+	}
+
 	return &ContainerManager{
-		client: client,
+		client:        client,
+		pathManager:   pathManager,
+		permissionMgr: permissionMgr,
+	}
+}
+
+// NewContainerManagerWithRegistry creates a new ContainerManager with a registry for volume resolution
+func NewContainerManagerWithRegistry(client podman.PodmanClient, registry *ManifestRegistry) *ContainerManager {
+	pathManager := NewVolumePathManager("")
+	permissionMgr, err := NewVolumePermissionManager()
+	if err != nil {
+		// Log error but continue with nil permission manager
+		fmt.Printf("Warning: failed to initialize volume permission manager: %v\n", err)
+	}
+
+	return &ContainerManager{
+		client:        client,
+		pathManager:   pathManager,
+		permissionMgr: permissionMgr,
+		registry:      registry,
 	}
 }
 
@@ -87,6 +116,16 @@ func (cm *ContainerManager) CreateResource(ctx context.Context, resource Resourc
 		return fmt.Errorf("expected ContainerResource, got %T", resource)
 	}
 
+	// Validate volume dependencies
+	if err := cm.validateVolumeDependencies(container); err != nil {
+		return fmt.Errorf("volume dependency validation failed: %w", err)
+	}
+
+	// Prepare volume paths and permissions
+	if err := cm.prepareVolumeMounts(container); err != nil {
+		return fmt.Errorf("failed to prepare volume mounts: %w", err)
+	}
+
 	connectedClient := podman.NewConnectedClient(cm.client)
 	defer connectedClient.Close()
 
@@ -101,7 +140,10 @@ func (cm *ContainerManager) CreateResource(ctx context.Context, resource Resourc
 	}
 
 	// Create container spec
-	spec := cm.buildContainerSpec(container)
+	spec, err := cm.buildContainerSpec(container)
+	if err != nil {
+		return fmt.Errorf("unable to build container spec: %w", err)
+	}
 
 	// Create container
 	response, err := podmanClient.CreateContainer(ctx, spec)
@@ -275,11 +317,24 @@ func (cm *ContainerManager) convertPodmanContainerToResource(ctx context.Context
 
 	// Convert volumes
 	for _, mount := range inspect.Mounts {
-		resource.Spec.Volumes = append(resource.Spec.Volumes, VolumeMount{
+		volumeMount := VolumeMount{
 			Name:      mount.Name,
 			MountPath: mount.Destination,
 			ReadOnly:  !mount.RW,
-		})
+		}
+
+		// Try to extract subPath from source if it's a bind mount
+		if mount.Type == "bind" && mount.Source != "" {
+			// For bind mounts, the source might contain subPath information
+			// This is a best-effort reconstruction since Podman doesn't store subPath separately
+			volumeMount.Name = mount.Name
+			if mount.Name == "" {
+				// If no name, use the source path as a fallback identifier
+				volumeMount.Name = mount.Source
+			}
+		}
+
+		resource.Spec.Volumes = append(resource.Spec.Volumes, volumeMount)
 	}
 
 	// Convert restart policy
@@ -299,11 +354,24 @@ func (cm *ContainerManager) pullImageIfNeeded(ctx context.Context, client podman
 	return client.PullImage(ctx, image)
 }
 
-func (cm *ContainerManager) buildContainerSpec(container *ContainerResource) *specgen.SpecGenerator {
+func (cm *ContainerManager) buildContainerSpec(container *ContainerResource) (*specgen.SpecGenerator, error) {
+	// Convert volume mounts with enhanced resolution
+	mounts, err := cm.convertVolumeMounts(container.Spec.Volumes, container)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert volume mounts: %w", err)
+	}
+
+	// Process secrets
+	env := cm.convertEnvVars(container.Spec.Env)
+	secretMounts, err := cm.processSecrets(container.Spec.Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process secrets: %w", err)
+	}
+
 	spec := &specgen.SpecGenerator{
 		ContainerBasicConfig: specgen.ContainerBasicConfig{
 			Name:   container.GetName(),
-			Env:    cm.convertEnvVars(container.Spec.Env),
+			Env:    env,
 			Labels: container.GetLabels(),
 		},
 		ContainerNetworkConfig: specgen.ContainerNetworkConfig{
@@ -311,8 +379,9 @@ func (cm *ContainerManager) buildContainerSpec(container *ContainerResource) *sp
 		},
 		ContainerStorageConfig: specgen.ContainerStorageConfig{
 			Image:   container.Spec.Image,
-			Mounts:  cm.convertVolumeMounts(container.Spec.Volumes),
+			Mounts:  mounts,
 			WorkDir: container.Spec.WorkingDir,
+			Secrets: secretMounts,
 		},
 		ContainerHealthCheckConfig: specgen.ContainerHealthCheckConfig{
 			HealthLogDestination: "/tmp",
@@ -325,10 +394,17 @@ func (cm *ContainerManager) buildContainerSpec(container *ContainerResource) *sp
 	}
 
 	// Set command and args
+	// In Podman, args are combined with command into a single Command field
 	if len(container.Spec.Command) > 0 {
 		spec.Command = container.Spec.Command
+		// Append args to command
+		if len(container.Spec.Args) > 0 {
+			spec.Command = append(spec.Command, container.Spec.Args...)
+		}
+	} else if len(container.Spec.Args) > 0 {
+		// If only args are specified, use them as the command
+		spec.Command = container.Spec.Args
 	}
-	// Note: Args are typically handled as part of Command in Podman
 
 	// Set UID/GID
 	if container.Spec.UID != nil {
@@ -340,7 +416,7 @@ func (cm *ContainerManager) buildContainerSpec(container *ContainerResource) *sp
 		spec.RestartPolicy = container.Spec.RestartPolicy
 	}
 
-	return spec
+	return spec, nil
 }
 
 func (cm *ContainerManager) convertEnvVars(envVars []EnvVar) map[string]string {
@@ -367,28 +443,242 @@ func (cm *ContainerManager) convertPortMappings(ports []ContainerPort) []nettype
 	return mappings
 }
 
-func (cm *ContainerManager) convertVolumeMounts(volumes []VolumeMount) []specs.Mount {
+func (cm *ContainerManager) convertVolumeMounts(volumes []VolumeMount, container *ContainerResource) ([]specs.Mount, error) {
 	var mounts []specs.Mount
+
 	for _, vol := range volumes {
+		// Resolve volume reference to actual volume resource
+		volumeResource, err := cm.resolveVolumeReference(vol.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve volume '%s': %w", vol.Name, err)
+		}
+
+		// Resolve volume path with subPath support
+		pathInfo, err := cm.pathManager.ResolveVolumePath(volumeResource, &vol)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve path for volume '%s': %w", vol.Name, err)
+		}
+
+		// Determine mount path
 		mountPath := vol.MountPath
 		if mountPath == "" {
 			mountPath = vol.ContainerPath // fallback to legacy field
 		}
-
-		// TODO: Resolve volume name to actual source path
-		// This will be enhanced when volume managers are implemented
-		source := vol.Name
-		if source == "" {
-			source = "/tmp/cutepod-volumes/" + vol.Name
+		if mountPath == "" {
+			return nil, fmt.Errorf("mountPath is required for volume '%s'", vol.Name)
 		}
 
-		mounts = append(mounts, specs.Mount{
+		// Build mount options with permission manager
+		options, err := cm.buildMountOptions(volumeResource, &vol, container, pathInfo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build mount options for volume '%s': %w", vol.Name, err)
+		}
+
+		// Create mount specification
+		mount := specs.Mount{
 			Destination: mountPath,
-			Source:      source,
-			Options:     cm.getMountOptions(vol.ReadOnly),
-		})
+			Source:      pathInfo.SourcePath,
+			Type:        cm.getMountType(volumeResource),
+			Options:     options,
+		}
+
+		mounts = append(mounts, mount)
 	}
-	return mounts
+
+	return mounts, nil
+}
+
+// validateVolumeDependencies validates that all referenced volumes exist
+func (cm *ContainerManager) validateVolumeDependencies(container *ContainerResource) error {
+	if cm.registry == nil {
+		// If no registry is available, skip validation
+		return nil
+	}
+
+	for _, vol := range container.Spec.Volumes {
+		if vol.Name == "" {
+			return fmt.Errorf("volume name cannot be empty")
+		}
+
+		// Check if volume exists in registry
+		_, exists := cm.registry.GetResource(vol.Name)
+		if !exists {
+			return fmt.Errorf("referenced volume '%s' does not exist", vol.Name)
+		}
+	}
+
+	return nil
+}
+
+// prepareVolumeMounts prepares volume paths and permissions before container creation
+func (cm *ContainerManager) prepareVolumeMounts(container *ContainerResource) error {
+	for _, vol := range container.Spec.Volumes {
+		// Resolve volume reference
+		volumeResource, err := cm.resolveVolumeReference(vol.Name)
+		if err != nil {
+			return fmt.Errorf("failed to resolve volume '%s': %w", vol.Name, err)
+		}
+
+		// Resolve volume path
+		pathInfo, err := cm.pathManager.ResolveVolumePath(volumeResource, &vol)
+		if err != nil {
+			return fmt.Errorf("failed to resolve path for volume '%s': %w", vol.Name, err)
+		}
+
+		// Ensure volume path exists
+		if err := cm.pathManager.EnsureVolumePath(pathInfo, volumeResource); err != nil {
+			return fmt.Errorf("failed to ensure path for volume '%s': %w", vol.Name, err)
+		}
+
+		// Manage host directory ownership if needed
+		if cm.permissionMgr != nil && volumeResource.Spec.Type == VolumeTypeHostPath {
+			if err := cm.permissionMgr.ManageHostDirectoryOwnership(pathInfo.SourcePath, volumeResource); err != nil {
+				return fmt.Errorf("failed to manage ownership for volume '%s': %w", vol.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// resolveVolumeReference resolves a volume name to a VolumeResource
+func (cm *ContainerManager) resolveVolumeReference(volumeName string) (*VolumeResource, error) {
+	if cm.registry == nil {
+		return nil, fmt.Errorf("no registry available to resolve volume '%s'", volumeName)
+	}
+
+	resource, exists := cm.registry.GetResource(volumeName)
+	if !exists {
+		return nil, fmt.Errorf("volume '%s' not found in registry", volumeName)
+	}
+
+	volumeResource, ok := resource.(*VolumeResource)
+	if !ok {
+		return nil, fmt.Errorf("resource '%s' is not a volume (type: %s)", volumeName, resource.GetType())
+	}
+
+	return volumeResource, nil
+}
+
+// buildMountOptions builds Podman mount options for a volume mount
+func (cm *ContainerManager) buildMountOptions(volume *VolumeResource, mount *VolumeMount, container *ContainerResource, pathInfo *VolumePathInfo) ([]string, error) {
+	var options []string
+
+	// Base mount type options
+	switch volume.Spec.Type {
+	case VolumeTypeHostPath:
+		options = append(options, "bind")
+	case VolumeTypeEmptyDir:
+		options = append(options, "bind")
+	case VolumeTypeVolume:
+		// Named volumes don't need bind option
+	}
+
+	// Read-only flag
+	if mount.ReadOnly {
+		options = append(options, "ro")
+	} else {
+		options = append(options, "rw")
+	}
+
+	// Use permission manager to build additional options
+	if cm.permissionMgr != nil {
+		// Determine if this volume is shared (used by multiple containers)
+		sharedAccess := cm.isVolumeShared(volume.GetName())
+
+		permOptions, err := cm.permissionMgr.BuildPodmanMountOptions(volume, mount, sharedAccess)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build permission options: %w", err)
+		}
+
+		// Merge permission options, avoiding duplicates
+		for _, opt := range permOptions {
+			if !cm.containsOption(options, opt) {
+				options = append(options, opt)
+			}
+		}
+	}
+
+	return options, nil
+}
+
+// getMountType determines the mount type for a volume
+func (cm *ContainerManager) getMountType(volume *VolumeResource) string {
+	switch volume.Spec.Type {
+	case VolumeTypeHostPath, VolumeTypeEmptyDir:
+		return "bind"
+	case VolumeTypeVolume:
+		return "volume"
+	default:
+		return "bind"
+	}
+}
+
+// isVolumeShared checks if a volume is used by multiple containers
+func (cm *ContainerManager) isVolumeShared(volumeName string) bool {
+	if cm.registry == nil {
+		return false
+	}
+
+	// Count how many containers reference this volume
+	containerCount := 0
+	for _, resource := range cm.registry.GetResourcesByType(ResourceTypeContainer) {
+		container, ok := resource.(*ContainerResource)
+		if !ok {
+			continue
+		}
+
+		for _, vol := range container.Spec.Volumes {
+			if vol.Name == volumeName {
+				containerCount++
+				if containerCount > 1 {
+					return true
+				}
+				break
+			}
+		}
+	}
+
+	return false
+}
+
+// containsOption checks if an option is already in the options slice
+func (cm *ContainerManager) containsOption(options []string, option string) bool {
+	for _, opt := range options {
+		if opt == option {
+			return true
+		}
+	}
+	return false
+}
+
+// processSecrets processes secret references and returns secret mounts
+func (cm *ContainerManager) processSecrets(secrets []SecretReference) ([]specgen.Secret, error) {
+	var secretMounts []specgen.Secret
+
+	for _, secretRef := range secrets {
+		if secretRef.Env {
+			// Mount secret as environment variables
+			secretMount := specgen.Secret{
+				Source: secretRef.Name,
+				Target: "env", // Specify env type for environment variables
+				Mode:   0644,
+			}
+			secretMounts = append(secretMounts, secretMount)
+		}
+
+		if secretRef.Path != "" {
+			// Mount secret as files
+			secretMount := specgen.Secret{
+				Source: secretRef.Name,
+				Target: secretRef.Path,
+				Mode:   0644, // Default file mode
+			}
+			secretMounts = append(secretMounts, secretMount)
+		}
+	}
+
+	return secretMounts, nil
 }
 
 func (cm *ContainerManager) getMountOptions(readOnly bool) []string {
@@ -523,12 +813,72 @@ func (cm *ContainerManager) compareVolumes(desired, actual []VolumeMount) bool {
 		if !exists {
 			return false
 		}
+
+		// Compare basic fields
 		if desiredVol.Name != actualVol.Name || desiredVol.ReadOnly != actualVol.ReadOnly {
+			return false
+		}
+
+		// Compare subPath
+		if desiredVol.SubPath != actualVol.SubPath {
+			return false
+		}
+
+		// Compare mount options if specified
+		if !cm.compareMountOptions(desiredVol.MountOptions, actualVol.MountOptions) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// compareMountOptions compares volume mount options
+func (cm *ContainerManager) compareMountOptions(desired, actual *VolumeMountOptions) bool {
+	// Both nil
+	if desired == nil && actual == nil {
+		return true
+	}
+
+	// One nil, one not
+	if desired == nil || actual == nil {
+		return false
+	}
+
+	// Compare SELinux labels
+	if desired.SELinuxLabel != actual.SELinuxLabel {
+		return false
+	}
+
+	// Compare UID mapping
+	if !cm.compareUIDGIDMapping(desired.UIDMapping, actual.UIDMapping) {
+		return false
+	}
+
+	// Compare GID mapping
+	if !cm.compareUIDGIDMapping(desired.GIDMapping, actual.GIDMapping) {
+		return false
+	}
+
+	return true
+}
+
+// compareUIDGIDMapping compares UID/GID mapping configurations
+func (cm *ContainerManager) compareUIDGIDMapping(desired, actual *UIDGIDMapping) bool {
+	// Both nil
+	if desired == nil && actual == nil {
+		return true
+	}
+
+	// One nil, one not
+	if desired == nil || actual == nil {
+		return false
+	}
+
+	// Compare all fields
+	return desired.ContainerID == actual.ContainerID &&
+		desired.HostID == actual.HostID &&
+		desired.Size == actual.Size
 }
 
 func (cm *ContainerManager) compareSecrets(desired, actual []SecretReference) bool {

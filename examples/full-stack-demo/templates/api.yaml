@@ -10,49 +10,12 @@ metadata:
 spec:
   image: {{ .Values.api.image }}
   command: ["node"]
-  args: ["-e", "
-    const http = require('http');
-    const server = http.createServer((req, res) => {
-      const response = {
-        message: 'Hello from {{ .Values.app.name }} API!',
-        timestamp: new Date().toISOString(),
-        version: '{{ .Values.app.version }}',
-        environment: process.env.NODE_ENV || 'development',
-        database: process.env.DATABASE_URL ? 'connected' : 'not configured',
-        cache: process.env.REDIS_URL ? 'connected' : 'not configured'
-      };
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(response, null, 2));
-    });
-    server.listen({{ .Values.api.port }}, '0.0.0.0', () => {
-      console.log('API server running on port {{ .Values.api.port }}');
-    });
-  "]
+  args: ["-e", "const fs = require('fs'); const http = require('http'); console.log('Starting API server...'); let secrets = {}; try { const secretData = fs.readFileSync('/run/secrets/env', 'utf8'); const lines = secretData.split('\\n'); for (const line of lines) { if (line.trim() && line.includes('=')) { const [key, value] = line.split('=', 2); secrets[key] = value; } } console.log('Secrets loaded from file:', Object.keys(secrets)); } catch (err) { console.error('Failed to load secrets:', err.message); } console.log('Environment variables loaded:'); console.log('- NODE_ENV:', process.env.NODE_ENV); console.log('- database-url:', secrets['database-url'] ? 'configured' : 'not configured'); console.log('- redis-url:', secrets['redis-url'] ? 'configured' : 'not configured'); console.log('- jwt-secret:', secrets['jwt-secret'] ? 'configured' : 'not configured'); console.log('- api-key:', secrets['api-key'] ? 'configured' : 'not configured'); const server = http.createServer(function(req, res) { if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString() })); return; } const response = { message: 'Hello from {{ .Values.app.name }} API!', timestamp: new Date().toISOString(), version: '{{ .Values.app.version }}', environment: process.env.NODE_ENV || 'development', database: secrets['database-url'] ? 'connected' : 'not configured', cache: secrets['redis-url'] ? 'connected' : 'not configured', secrets: { jwt_secret: secrets['jwt-secret'] ? 'configured' : 'not configured', api_key: secrets['api-key'] ? 'configured' : 'not configured' } }; res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(response, null, 2)); }); server.listen({{ .Values.api.port }}, '0.0.0.0', function() { console.log('API server running on port {{ .Values.api.port }}'); });"]
   env:
     - name: NODE_ENV
       value: production
     - name: PORT
       value: "{{ .Values.api.port }}"
-    - name: DATABASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.secrets.api.name }}
-          key: database-url
-    - name: REDIS_URL
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.secrets.api.name }}
-          key: redis-url
-    - name: JWT_SECRET
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.secrets.api.name }}
-          key: jwt-secret
-    - name: API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: {{ .Values.secrets.api.name }}
-          key: api-key
   ports:
     - containerPort: {{ .Values.api.port }}
       hostPort: 3000
@@ -60,7 +23,16 @@ spec:
   volumes:
     - name: {{ .Values.volumes.logs.name }}
       mountPath: /var/log/app
+      subPath: api
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access for logs
+    - name: {{ .Values.volumes.config.name }}
+      mountPath: /app/config
+      subPath: api
+      readOnly: true
+      mountOptions:
+        seLinuxLabel: z  # Shared read-only config
   networks:
     - {{ .Values.network.name }}
   secrets:

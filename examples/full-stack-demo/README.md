@@ -24,9 +24,11 @@ This comprehensive demo chart showcases all Cutepod resource types and demonstra
 └─────────────────────────────────────────────────────────────┘
 
 External Volumes:
-├── postgres-data (persistent volume)
-├── webapp-content (bind mount: /tmp/webapp-content)
-└── app-logs (bind mount: /tmp/app-logs)
+├── postgres-data (named volume with private SELinux access)
+├── webapp-content (hostPath: /tmp/webapp-content with shared access)
+├── app-logs (hostPath: /tmp/app-logs with subPath organization)
+├── redis-cache (emptyDir tmpfs: 256Mi memory-backed)
+└── app-config (hostPath: /tmp/app-config with read-only configs)
 
 Secrets:
 ├── db-credentials (database connection info)
@@ -41,10 +43,12 @@ Secrets:
 - Enables container-to-container communication
 - Isolated from host network for security
 
-### 📦 Volumes
-- **postgres-data**: Persistent volume for database storage
-- **webapp-content**: Bind mount for web application static content
-- **app-logs**: Bind mount for centralized application logging
+### 📦 Volumes (Enhanced Features)
+- **postgres-data**: Named Podman volume with private SELinux access and proper ownership
+- **webapp-content**: hostPath volume with shared SELinux access and subPath support
+- **app-logs**: hostPath volume with shared access for centralized logging with subPath organization
+- **redis-cache**: emptyDir volume using tmpfs (Memory) for high-performance caching
+- **app-config**: hostPath volume for configuration files with read-only access
 
 ### 🔐 Secrets
 - **db-credentials**: Database connection credentials
@@ -65,7 +69,7 @@ The chart demonstrates proper dependency ordering:
 ```
 1. Network (demo-network)
    ↓
-2. Volumes (postgres-data, webapp-content, app-logs)
+2. Volumes (postgres-data, webapp-content, app-logs, redis-cache, app-config)
    ↓
 3. Secrets (db-credentials, api-keys, tls-certs)
    ↓
@@ -86,7 +90,13 @@ The chart demonstrates proper dependency ordering:
 
 ### 🔧 Configuration Management
 - **Environment Variables**: Both direct values and secret references
-- **Volume Mounts**: Multiple volume types (persistent, bind mounts)
+- **Enhanced Volume Mounts**: Multiple volume types with advanced features
+  - **hostPath volumes**: With DirectoryOrCreate type and subPath support
+  - **Named volumes**: Podman-managed persistent storage
+  - **emptyDir volumes**: Memory-backed temporary storage with size limits
+  - **SELinux Integration**: Proper labeling (z/Z) for shared/private access
+  - **Ownership Management**: Automatic UID/GID mapping for rootless Podman
+  - **SubPath Support**: Mount specific subdirectories within volumes
 - **Network Configuration**: Custom network with proper subnet configuration
 - **Port Mapping**: Both fixed and dynamic port assignments
 - **Restart Policies**: Uses Podman-compatible values (`always`, `on-failure`, `no`, `unless-stopped`)
@@ -162,6 +172,56 @@ The demo includes:
 - **Resource Monitoring**: Resource limits and requests configured
 - **Status Endpoints**: API service provides status information
 
+## Enhanced Volume Features Demonstrated
+
+This demo showcases the advanced volume capabilities:
+
+### Volume Types
+- **Named Volumes**: `postgres-data` uses a Podman-managed volume for persistence
+- **hostPath Volumes**: `webapp-content`, `app-logs`, and `app-config` use host directory mounts
+- **emptyDir Volumes**: `redis-cache` uses memory-backed temporary storage
+
+### Advanced Mount Options
+- **SubPath Support**: Different containers mount different subdirectories
+  - Logs are organized: `nginx/instance-1`, `nginx/instance-2`, `api`, `redis`, `postgresql`
+  - Config files: `nginx/nginx.conf`, `api/config.json`
+  - Static content: `static-content` subdirectory
+- **SELinux Labels**: Proper security labeling for shared vs private access
+  - `z` (shared): Multiple containers can access (logs, configs, webapp content)
+  - `Z` (private): Single container access (database data, cache data)
+- **Read-Only Mounts**: Configuration files mounted read-only for security
+
+### Security Context Integration
+- **Ownership Management**: Volumes automatically get proper UID/GID ownership
+  - Database: `999:999` (postgres user)
+  - Web servers: `101:101` (nginx user)
+  - API service: `1000:1000` (node user)
+  - Cache: `999:999` (redis user)
+- **Rootless Podman Support**: Automatic user namespace mapping
+
+### Volume Organization
+```
+/tmp/webapp-content/
+└── static-content/          # Shared by both webapp instances
+
+/tmp/app-logs/
+├── nginx/
+│   ├── instance-1/          # WebApp-1 logs
+│   └── instance-2/          # WebApp-2 logs
+├── api/                     # API service logs
+├── redis/                   # Redis logs
+└── postgresql/              # Database logs
+
+/tmp/app-config/
+├── nginx/
+│   └── nginx.conf           # Nginx configuration
+└── api/
+    └── config.json          # API configuration
+
+Memory (tmpfs):
+└── redis-cache (256Mi)      # High-performance cache storage
+```
+
 ## Educational Value
 
 This demo teaches:
@@ -169,8 +229,10 @@ This demo teaches:
 2. **Resource Types**: Usage of all Cutepod resource types
 3. **Security Practices**: Proper secret and security configuration
 4. **Networking**: Container networking and communication
-5. **Storage**: Different volume types and use cases
+5. **Enhanced Storage**: Advanced volume types, subPath, and security features
 6. **Scaling**: Multiple container instances with load balancing
 7. **Configuration**: Environment-based configuration management
+8. **SELinux Integration**: Proper security labeling for container volumes
+9. **Rootless Podman**: User namespace mapping and ownership management
 
 Perfect for learning Cutepod's capabilities and best practices!

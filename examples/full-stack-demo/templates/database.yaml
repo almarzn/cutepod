@@ -37,9 +37,14 @@ spec:
     - name: {{ .Values.volumes.database.name }}
       mountPath: /var/lib/postgresql/data
       readOnly: false
+      mountOptions:
+        seLinuxLabel: Z  # Private access for database
     - name: {{ .Values.volumes.logs.name }}
       mountPath: /var/log/postgresql
+      subPath: postgresql
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access for logs
   networks:
     - {{ .Values.network.name }}
   secrets:

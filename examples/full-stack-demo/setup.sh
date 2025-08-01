@@ -7,21 +7,24 @@ set -e
 
 echo "🚀 Setting up Full Stack Demo environment..."
 
-# Create required host directories
+# Create required host directories with enhanced structure
 echo "📁 Creating host directories..."
-mkdir -p /tmp/webapp-content
-mkdir -p /tmp/app-logs
+mkdir -p /tmp/webapp-content/static-content
+mkdir -p /tmp/app-logs/{nginx/{instance-1,instance-2},api,redis,postgresql}
+mkdir -p /tmp/app-config/{nginx,api}
 
 # Set proper permissions
 echo "🔐 Setting permissions..."
 chown -R $USER:$USER /tmp/webapp-content
 chown -R $USER:$USER /tmp/app-logs
+chown -R $USER:$USER /tmp/app-config
 chmod -R 755 /tmp/webapp-content
 chmod -R 755 /tmp/app-logs
+chmod -R 755 /tmp/app-config
 
 # Create sample static content
 echo "📄 Creating sample static content..."
-cat > /tmp/webapp-content/demo.html << 'EOF'
+cat > /tmp/webapp-content/static-content/demo.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -43,7 +46,85 @@ cat > /tmp/webapp-content/demo.html << 'EOF'
 </html>
 EOF
 
-cat > /tmp/webapp-content/api-docs.json << 'EOF'
+# Create configuration files
+echo "⚙️ Creating configuration files..."
+cat > /tmp/app-config/nginx/nginx.conf << 'EOF'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    
+    access_log /var/log/nginx/access.log main;
+    
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    
+    server {
+        listen 80;
+        server_name localhost;
+        
+        location / {
+            root /usr/share/nginx/html;
+            index index.html index.htm;
+        }
+        
+        location /static/ {
+            alias /usr/share/nginx/html/static/;
+            expires 1d;
+            add_header Cache-Control "public, immutable";
+        }
+        
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+}
+EOF
+
+cat > /tmp/app-config/api/config.json << 'EOF'
+{
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0"
+  },
+  "database": {
+    "host": "postgres-db",
+    "port": 5432,
+    "name": "demodb",
+    "pool": {
+      "min": 2,
+      "max": 10
+    }
+  },
+  "cache": {
+    "host": "redis-cache",
+    "port": 6379,
+    "ttl": 3600
+  },
+  "logging": {
+    "level": "info",
+    "file": "/var/log/app/api.log"
+  }
+}
+EOF
+
+cat > /tmp/webapp-content/static-content/api-docs.json << 'EOF'
 {
   "openapi": "3.0.0",
   "info": {
@@ -90,9 +171,12 @@ EOF
 echo "✅ Setup complete!"
 echo ""
 echo "📋 Summary:"
-echo "   • Host directories created: /tmp/webapp-content, /tmp/app-logs"
-echo "   • Sample static content created"
-echo "   • Permissions configured"
+echo "   • Host directories created with enhanced structure:"
+echo "     - /tmp/webapp-content/static-content/"
+echo "     - /tmp/app-logs/{nginx,api,redis,postgresql}/"
+echo "     - /tmp/app-config/{nginx,api}/"
+echo "   • Sample static content and configurations created"
+echo "   • Permissions configured for enhanced volume features"
 echo ""
 echo "🚀 Ready to deploy:"
 echo "   cutepod install demo examples/full-stack-demo --dry-run"

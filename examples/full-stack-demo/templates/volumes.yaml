@@ -1,4 +1,4 @@
-# Database persistent volume
+# Database persistent volume (Named Podman volume)
 apiVersion: cutepod.io/v1
 kind: CuteVolume
 metadata:
@@ -9,16 +9,20 @@ metadata:
     type: persistent
 spec:
   type: volume
-  driver: local
-  options:
-    type: none
-    o: bind
-  labels:
-    usage: database-storage
-    backup: required
+  volume:
+    driver: local
+    options:
+      type: none
+      o: bind
+  securityContext:
+    owner:
+      user: 999  # postgres user
+      group: 999 # postgres group
+    seLinuxOptions:
+      level: private  # Private access for database
 
 ---
-# Web application content volume (bind mount)
+# Web application content volume (hostPath with subPath support)
 apiVersion: cutepod.io/v1
 kind: CuteVolume
 metadata:
@@ -28,17 +32,19 @@ metadata:
     component: webapp
     type: bind-mount
 spec:
-  type: bind
-  hostPath: {{ .Values.volumes.webapp.hostPath }}
-  options:
-    type: bind
-    o: rw
-  labels:
-    usage: webapp-content
-    backup: optional
+  type: hostPath
+  hostPath:
+    path: {{ .Values.volumes.webapp.hostPath }}
+    type: DirectoryOrCreate
+  securityContext:
+    owner:
+      user: 101  # nginx user
+      group: 101 # nginx group
+    seLinuxOptions:
+      level: shared  # Shared access for multiple webapp instances
 
 ---
-# Application logs volume (bind mount)
+# Application logs volume (hostPath with proper permissions)
 apiVersion: cutepod.io/v1
 kind: CuteVolume
 metadata:
@@ -48,11 +54,55 @@ metadata:
     component: logging
     type: bind-mount
 spec:
-  type: bind
-  hostPath: {{ .Values.volumes.logs.hostPath }}
-  options:
-    type: bind
-    o: rw
+  type: hostPath
+  hostPath:
+    path: {{ .Values.volumes.logs.hostPath }}
+    type: DirectoryOrCreate
+  securityContext:
+    owner:
+      user: 1000  # Common user for API service
+      group: 1000 # Common group for API service
+    seLinuxOptions:
+      level: shared  # Shared access for multiple services
+
+---
+# Temporary cache volume (emptyDir for Redis)
+apiVersion: cutepod.io/v1
+kind: CuteVolume
+metadata:
+  name: {{ .Values.volumes.cache.name }}
   labels:
-    usage: application-logs
-    backup: required
+    app: {{ .Values.app.name }}
+    component: cache
+    type: temporary
+spec:
+  type: emptyDir
+  emptyDir:
+    medium: Memory  # Use tmpfs for better performance
+    sizeLimit: {{ .Values.volumes.cache.sizeLimit }}
+  securityContext:
+    owner:
+      user: 999  # redis user
+      group: 999 # redis group
+
+---
+# Configuration volume (hostPath for config files)
+apiVersion: cutepod.io/v1
+kind: CuteVolume
+metadata:
+  name: {{ .Values.volumes.config.name }}
+  labels:
+    app: {{ .Values.app.name }}
+    component: config
+    type: configuration
+spec:
+  type: hostPath
+  hostPath:
+    path: {{ .Values.volumes.config.hostPath }}
+    type: DirectoryOrCreate
+  securityContext:
+    owner:
+      user: 0    # root for config files
+      group: 0   # root group
+    seLinuxOptions:
+      level: shared  # Shared access for reading configs

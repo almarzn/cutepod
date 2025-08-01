@@ -27,9 +27,17 @@ spec:
       hostPort: 0  # Let Podman assign a random host port
       protocol: TCP
   volumes:
+    - name: {{ .Values.volumes.cache.name }}
+      mountPath: /data
+      readOnly: false
+      mountOptions:
+        seLinuxLabel: Z  # Private access for Redis data
     - name: {{ .Values.volumes.logs.name }}
       mountPath: /var/log/redis
+      subPath: redis
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access for logs
   networks:
     - {{ .Values.network.name }}
   restartPolicy: always

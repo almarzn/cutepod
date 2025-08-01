@@ -294,7 +294,8 @@ func (vpm *VolumePermissionManager) ManageHostDirectoryOwnership(hostPath string
 	// Apply ownership if specified
 	if uid != -1 || gid != -1 {
 		if err := os.Chown(hostPath, uid, gid); err != nil {
-			return fmt.Errorf("failed to set ownership on %s to %d:%d: %w", hostPath, uid, gid, err)
+			// In rootless mode, ownership changes may fail - log warning but continue
+			fmt.Printf("Warning: failed to set ownership on %s to %d:%d: %v (continuing anyway)\n", hostPath, uid, gid, err)
 		}
 	}
 

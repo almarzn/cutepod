@@ -77,10 +77,22 @@ spec:
   volumes:
     - name: {{ .Values.volumes.webapp.name }}
       mountPath: /usr/share/nginx/html/static
+      subPath: static-content
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access between webapp instances
     - name: {{ .Values.volumes.logs.name }}
       mountPath: /var/log/nginx
+      subPath: nginx/instance-1
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access for logs
+    - name: {{ .Values.volumes.config.name }}
+      mountPath: /etc/nginx/nginx.conf
+      subPath: nginx/nginx.conf
+      readOnly: true
+      mountOptions:
+        seLinuxLabel: z  # Shared read-only config
   networks:
     - {{ .Values.network.name }}
   secrets:
@@ -186,10 +198,22 @@ spec:
   volumes:
     - name: {{ .Values.volumes.webapp.name }}
       mountPath: /usr/share/nginx/html/static
+      subPath: static-content
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access between webapp instances
     - name: {{ .Values.volumes.logs.name }}
       mountPath: /var/log/nginx
+      subPath: nginx/instance-2
       readOnly: false
+      mountOptions:
+        seLinuxLabel: z  # Shared access for logs
+    - name: {{ .Values.volumes.config.name }}
+      mountPath: /etc/nginx/nginx.conf
+      subPath: nginx/nginx.conf
+      readOnly: true
+      mountOptions:
+        seLinuxLabel: z  # Shared read-only config
   networks:
     - {{ .Values.network.name }}
   secrets:
