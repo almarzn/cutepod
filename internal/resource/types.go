@@ -42,11 +42,14 @@ type Resource interface {
 }
 
 // BaseResource provides common functionality for all resources
+// +kubebuilder:object:generate=false
 type BaseResource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	ResourceType      ResourceType `json:"-"`
 }
+
+// +kubebuilder:object:generate=false
 
 // GetType implements Resource interface
 func (b *BaseResource) GetType() ResourceType {

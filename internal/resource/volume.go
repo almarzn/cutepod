@@ -4,16 +4,28 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Namespaced,shortName=cv
+// +kubebuilder:subresource:status
 
 // VolumeResource represents a volume resource that implements the Resource interface
 type VolumeResource struct {
-	BaseResource `json:",inline"`
-	Spec         CuteVolumeSpec `json:"spec"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec CuteVolumeSpec `json:"spec"`
 }
+
+// +kubebuilder:object:generate=true
 
 // CuteVolumeSpec defines the specification for a volume with Kubernetes-style volume types
 type CuteVolumeSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=hostPath;emptyDir;volume
 	Type            VolumeType             `json:"type"`
 	HostPath        *HostPathVolumeSource  `json:"hostPath,omitempty"`
 	EmptyDir        *EmptyDirVolumeSource  `json:"emptyDir,omitempty"`
@@ -33,7 +45,10 @@ const (
 
 // HostPathVolumeSource represents a host path mapped into a pod
 type HostPathVolumeSource struct {
-	Path string        `json:"path"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Path string `json:"path"`
+	// +kubebuilder:validation:Enum=DirectoryOrCreate;Directory;FileOrCreate;File;Socket;CharDevice;BlockDevice
 	Type *HostPathType `json:"type,omitempty"`
 }
 
@@ -91,10 +106,34 @@ type VolumeOwnership struct {
 // NewVolumeResource creates a new VolumeResource
 func NewVolumeResource() *VolumeResource {
 	return &VolumeResource{
-		BaseResource: BaseResource{
-			ResourceType: ResourceTypeVolume,
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "cutepod/v1alpha1",
+			Kind:       "CuteVolume",
 		},
 	}
+}
+
+// GetType implements Resource interface
+func (v *VolumeResource) GetType() ResourceType {
+	return ResourceTypeVolume
+}
+
+// GetName implements Resource interface
+func (v *VolumeResource) GetName() string {
+	return v.ObjectMeta.Name
+}
+
+// GetLabels implements Resource interface
+func (v *VolumeResource) GetLabels() map[string]string {
+	if v.ObjectMeta.Labels == nil {
+		return make(map[string]string)
+	}
+	return v.ObjectMeta.Labels
+}
+
+// SetLabels implements Resource interface
+func (v *VolumeResource) SetLabels(labels map[string]string) {
+	v.ObjectMeta.Labels = labels
 }
 
 // GetDependencies returns the resources this volume depends on

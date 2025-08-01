@@ -3,17 +3,30 @@ package resource
 import (
 	"encoding/base64"
 	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Namespaced,shortName=cs
+// +kubebuilder:subresource:status
 
 // SecretResource represents a secret resource that implements the Resource interface
 type SecretResource struct {
-	BaseResource `json:",inline"`
-	Spec         CuteSecretSpec `json:"spec"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec CuteSecretSpec `json:"spec"`
 }
+
+// +kubebuilder:object:generate=true
 
 // CuteSecretSpec defines the specification for a secret
 type CuteSecretSpec struct {
-	Type SecretType        `json:"type,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="opaque"
+	Type SecretType `json:"type,omitempty"`
+	// +kubebuilder:validation:Required
 	Data map[string]string `json:"data,omitempty"` // Base64 encoded data
 }
 
@@ -27,10 +40,34 @@ const (
 // NewSecretResource creates a new SecretResource
 func NewSecretResource() *SecretResource {
 	return &SecretResource{
-		BaseResource: BaseResource{
-			ResourceType: ResourceTypeSecret,
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "cutepod/v1alpha1",
+			Kind:       "CuteSecret",
 		},
 	}
+}
+
+// GetType implements Resource interface
+func (s *SecretResource) GetType() ResourceType {
+	return ResourceTypeSecret
+}
+
+// GetName implements Resource interface
+func (s *SecretResource) GetName() string {
+	return s.ObjectMeta.Name
+}
+
+// GetLabels implements Resource interface
+func (s *SecretResource) GetLabels() map[string]string {
+	if s.ObjectMeta.Labels == nil {
+		return make(map[string]string)
+	}
+	return s.ObjectMeta.Labels
+}
+
+// SetLabels implements Resource interface
+func (s *SecretResource) SetLabels(labels map[string]string) {
+	s.ObjectMeta.Labels = labels
 }
 
 // GetDependencies returns the resources this secret depends on

@@ -9,4 +9,6 @@
 //
 // The resource system is designed to be extensible, allowing new resource types
 // to be added by implementing the Resource and ResourceManager interfaces.
+
+// +groupName=cutepod
 package resource

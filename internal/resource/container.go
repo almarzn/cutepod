@@ -5,16 +5,27 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Namespaced,shortName=cc
+// +kubebuilder:subresource:status
 
 // ContainerResource represents a container resource that implements the Resource interface
 type ContainerResource struct {
-	BaseResource `json:",inline"`
-	Spec         CuteContainerSpec `json:"spec"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec CuteContainerSpec `json:"spec"`
 }
+
+// +kubebuilder:object:generate=true
 
 // CuteContainerSpec defines the specification for a container
 type CuteContainerSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Image           string                `json:"image"`
 	Command         []string              `json:"command,omitempty"`
 	Args            []string              `json:"args,omitempty"`
@@ -41,9 +52,14 @@ type EnvVar struct {
 }
 
 type ContainerPort struct {
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	ContainerPort uint16 `json:"containerPort"`
-	HostPort      uint16 `json:"hostPort,omitempty"`
-	Protocol      string `json:"protocol,omitempty"` // TCP or UDP
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	HostPort uint16 `json:"hostPort,omitempty"`
+	// +kubebuilder:validation:Enum=TCP;UDP
+	Protocol string `json:"protocol,omitempty"` // TCP or UDP
 }
 
 type VolumeMount struct {
@@ -113,10 +129,34 @@ type ResourceList struct {
 // NewContainerResource creates a new ContainerResource
 func NewContainerResource() *ContainerResource {
 	return &ContainerResource{
-		BaseResource: BaseResource{
-			ResourceType: ResourceTypeContainer,
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "cutepod/v1alpha1",
+			Kind:       "CuteContainer",
 		},
 	}
+}
+
+// GetType implements Resource interface
+func (c *ContainerResource) GetType() ResourceType {
+	return ResourceTypeContainer
+}
+
+// GetName implements Resource interface
+func (c *ContainerResource) GetName() string {
+	return c.ObjectMeta.Name
+}
+
+// GetLabels implements Resource interface
+func (c *ContainerResource) GetLabels() map[string]string {
+	if c.ObjectMeta.Labels == nil {
+		return make(map[string]string)
+	}
+	return c.ObjectMeta.Labels
+}
+
+// SetLabels implements Resource interface
+func (c *ContainerResource) SetLabels(labels map[string]string) {
+	c.ObjectMeta.Labels = labels
 }
 
 // GetDependencies returns the resources this container depends on
